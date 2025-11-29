@@ -19,24 +19,29 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.android.volley.Request;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+// Import Firebase
+import com.google.firebase.FirebaseException;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.auth.PhoneAuthOptions;
+import com.google.firebase.auth.PhoneAuthProvider;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class LoginActivity extends AppCompatActivity {
 
     private ViewGroup mainContainer;
     private LinearLayout layoutLogin, layoutRegister;
     private Button btnMasukTab, btnDaftarTab;
-    private EditText inputPhoneLogin, inputPasswordLogin;
+    private EditText inputPhoneLogin, inputPasswordLogin; // Password tidak dipakai di Auth OTP
     private ImageView btnTogglePassLogin;
     private Button btnLogin;
     private TextView textForgot;
@@ -45,35 +50,34 @@ public class LoginActivity extends AppCompatActivity {
     private ImageView btnTogglePassReg;
     private Button btnRegisterAction;
 
-    private boolean isLoginPassVisible = false;
-    private boolean isRegPassVisible = false;
+    // Firebase
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
+    private String mVerificationId;
+    private String pendingNama = "";
+    private String pendingRt = "";
+    private String pendingPhone = "";
+    private boolean isRegisterFlow = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        // --- MATIKAN INI SAAT TESTING AGAR TIDAK LANGSUNG MASUK DASHBOARD ---
-        // checkSession();
+        // Inisialisasi Firebase
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
+        // Cek jika user sudah login sebelumnya
+        if (mAuth.getCurrentUser() != null) {
+            checkUserRole(mAuth.getCurrentUser().getUid());
+        }
 
         initViews();
+        setupUI(); // Sembunyikan kolom password login karena pakai OTP
         setupSpinnerRt();
         setupTabs();
-        setupPasswordToggles();
         setupActionButtons();
-    }
-
-    // Cek apakah user masih login (Auto Login)
-    private void checkSession() {
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        String savedId = prefs.getString("id", null);
-        String savedRole = prefs.getString("role", null);
-        String savedNama = prefs.getString("nama", "User");
-
-        if (savedId != null && savedRole != null) {
-            Log.d("SESSION", "User found: " + savedNama + " Role: " + savedRole);
-            redirectDashboard(savedRole, savedNama);
-        }
     }
 
     private void initViews() {
@@ -93,6 +97,19 @@ public class LoginActivity extends AppCompatActivity {
         inputPassReg = findViewById(R.id.inputPassReg);
         btnTogglePassReg = findViewById(R.id.btnTogglePassReg);
         btnRegisterAction = findViewById(R.id.btnRegisterAction);
+    }
+
+    private void setupUI() {
+        // Karena login pakai OTP, kita sembunyikan kolom password di Tab Login
+        // inputPasswordLogin.setVisibility(View.GONE);
+        // btnTogglePassLogin.setVisibility(View.GONE);
+        // textForgot.setVisibility(View.GONE);
+
+        // ATAU biarkan saja tapi abaikan isinya.
+        // Agar user tidak bingung, sebaiknya di layout XML nanti diubah.
+        // Untuk sekarang via kodingan kita "disable" visualnya:
+        inputPasswordLogin.setHint("Password tidak diperlukan (OTP)");
+        inputPasswordLogin.setEnabled(false);
     }
 
     private void setupSpinnerRt() {
@@ -136,165 +153,331 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private void setupPasswordToggles() {
-        btnTogglePassLogin.setOnClickListener(v -> isLoginPassVisible = togglePassword(inputPasswordLogin, btnTogglePassLogin, isLoginPassVisible));
-        btnTogglePassReg.setOnClickListener(v -> isRegPassVisible = togglePassword(inputPassReg, btnTogglePassReg, isRegPassVisible));
-    }
-
-    private boolean togglePassword(EditText input, ImageView icon, boolean isVisible) {
-        if (isVisible) {
-            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            icon.setImageResource(R.drawable.icon_mata2);
-        } else {
-            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-            icon.setImageResource(R.drawable.icon_mata1);
-        }
-        input.setSelection(input.getText().length());
-        return !isVisible;
-    }
-
     private void setupActionButtons() {
+        // --- JALUR LOGIN (Hanya untuk user lama) ---
         btnLogin.setOnClickListener(v -> {
-            String phone = inputPhoneLogin.getText().toString().trim();
-            String pass = inputPasswordLogin.getText().toString().trim();
-            if (phone.isEmpty() || pass.isEmpty()) {
-                Toast.makeText(this, "Isi nomor telepon dan password!", Toast.LENGTH_SHORT).show();
-            } else {
-                performLogin(phone, pass);
+            String rawPhone = inputPhoneLogin.getText().toString().trim();
+            if (rawPhone.isEmpty()) {
+                inputPhoneLogin.setError("Masukkan nomor telepon");
+                return;
             }
+            String formattedPhone = formatPhoneNumber(rawPhone);
+
+            // Cek dulu: Apakah nomor ini ada di database?
+            checkUserExists(formattedPhone, true);
         });
 
-        btnRegisterAction.setOnClickListener(v -> performRegister());
+        // --- JALUR REGISTER (Hanya untuk user baru) ---
+        btnRegisterAction.setOnClickListener(v -> {
+            String nama = inputNamaReg.getText().toString().trim();
+            String rawPhone = inputPhoneReg.getText().toString().trim();
+            String rt = inputRtReg.getSelectedItem().toString(); // Ambil dari Spinner
 
-        textForgot.setOnClickListener(v -> {
-            Intent intent = new Intent(LoginActivity.this, ResetPasswordActivity.class);
-            startActivity(intent);
+            if (nama.isEmpty() || rawPhone.isEmpty()) {
+                Toast.makeText(this, "Nama dan No HP harus diisi!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String formattedPhone = formatPhoneNumber(rawPhone);
+
+            // Simpan data di variabel sementara
+            pendingNama = nama;
+            pendingRt = rt;
+            pendingPhone = formattedPhone;
+
+            // Cek dulu: Apakah nomor ini SUDAH ada? (Kalau sudah, jangan daftar lagi)
+            checkUserExists(formattedPhone, false);
+        });
+
+
+        // --- LOGIC REGISTER (DAFTAR) ---
+        // Saat ini fokus ke Login dulu, register nanti disesuaikan
+        btnRegisterAction.setOnClickListener(v -> {
+            Toast.makeText(this, "Silakan gunakan menu Masuk untuk Login OTP", Toast.LENGTH_SHORT).show();
         });
     }
 
-    // --- LOGIC LOGIN UTAMA ---
-    private void performLogin(String telepon, String password) {
-        // UPDATE URL INI SESUAI TUNNEL TERBARU KAMU
-        String url = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/login.php";
+    // isLoginAction = true (Tombol Masuk), false (Tombol Daftar)
+    private void checkUserExists(String phone, boolean isLoginAction) {
+        // Tampilkan loading (opsional, pakai Toast dulu biar simpel)
+        Toast.makeText(this, "Mengecek data...", Toast.LENGTH_SHORT).show();
 
-        StringRequest request = new StringRequest(Request.Method.POST, url,
-                response -> {
-                    Log.d("API_LOGIN", "Response: " + response);
+        db.collection("users")
+                .whereEqualTo("telepon", phone)
+                .get()
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        boolean exists = !task.getResult().isEmpty();
 
-                    try {
-                        JSONObject obj = new JSONObject(response);
-
-                        if (obj.has("success") && obj.getBoolean("success")) {
-                            JSONObject user = obj.getJSONObject("data");
-
-                            // Ambil data (Nama kolom JSON harus sama dengan di login.php)
-                            String idWarga = user.optString("id", "0");
-                            String nama = user.optString("nama", "Warga");
-                            String idRt = user.optString("id_rt", "0");
-
-                            // Ambil Role (Harus 'Warga', 'KetuaRT', atau 'KetuaRW')
-                            String role = user.optString("role", "Warga");
-
-                            // Simpan ke SharedPreferences
-                            SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-                            prefs.edit()
-                                    .putString("id", idWarga)
-                                    .putString("id_rt", idRt)
-                                    .putString("nama", nama)
-                                    .putString("role", role)
-                                    .apply();
-
-                            Toast.makeText(this, "Login Sukses: " + role, Toast.LENGTH_SHORT).show();
-
-                            // Pindah halaman sesuai role
-                            redirectDashboard(role, nama);
-
+                        if (isLoginAction) {
+                            // --- KASUS LOGIN ---
+                            if (exists) {
+                                // Benar, user ada. Lanjut OTP.
+                                isRegisterFlow = false; // Set mode ke Login
+                                startPhoneNumberVerification(phone);
+                            } else {
+                                // Salah, user belum terdaftar.
+                                Toast.makeText(this, "Nomor belum terdaftar! Silakan ke menu Daftar.", Toast.LENGTH_LONG).show();
+                            }
                         } else {
-                            String msg = obj.optString("message", "Login Gagal");
-                            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                            // --- KASUS REGISTER ---
+                            if (exists) {
+                                // Salah, user sudah ada. Jangan daftar lagi.
+                                Toast.makeText(this, "Nomor sudah terdaftar! Silakan Login.", Toast.LENGTH_LONG).show();
+                            } else {
+                                // Benar, user baru. Lanjut OTP.
+                                isRegisterFlow = true; // Set mode ke Register
+                                startPhoneNumberVerification(phone);
+                            }
                         }
-                    } catch (Exception e) {
-                        Log.e("LOGIN_ERROR", "Parse Error: " + e.getMessage());
-                        Toast.makeText(this, "Error Format Data Server", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Gagal koneksi database.", Toast.LENGTH_SHORT).show();
                     }
-                },
-                error -> {
-                    Log.e("LOGIN_NETWORK", "Error: " + error.toString());
-                    Toast.makeText(this, "Gagal terhubung ke server", Toast.LENGTH_SHORT).show();
-                }
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("telepon", telepon);
-                params.put("password", password);
-                return params;
-            }
-        };
-        Volley.newRequestQueue(this).add(request);
+                });
+    }
+    // Ubah 08xxx jadi +628xxx
+    private String formatPhoneNumber(String phone) {
+        if (phone.startsWith("0")) {
+            return "+62" + phone.substring(1);
+        } else if (!phone.startsWith("+")) {
+            return "+62" + phone;
+        }
+        return phone;
     }
 
-    // --- LOGIC PEMBAGIAN DASHBOARD (ROLE CHECK) ---
+    // =================================================================
+    // 1. KIRIM KODE OTP
+    // =================================================================
+    private void startPhoneNumberVerification(String phoneNumber) {
+        Toast.makeText(this, "Mengirim OTP ke " + phoneNumber, Toast.LENGTH_SHORT).show();
+        btnLogin.setEnabled(false); // Cegah klik ganda
+
+        PhoneAuthOptions options =
+                PhoneAuthOptions.newBuilder(mAuth)
+                        .setPhoneNumber(phoneNumber)       // Phone number to verify
+                        .setTimeout(60L, TimeUnit.SECONDS) // Timeout and unit
+                        .setActivity(this)                 // Activity (for callback binding)
+                        .setCallbacks(mCallbacks)          // OnVerificationStateChangedCallbacks
+                        .build();
+        PhoneAuthProvider.verifyPhoneNumber(options);
+    }
+
+    // Callback status pengiriman OTP
+    private final PhoneAuthProvider.OnVerificationStateChangedCallbacks mCallbacks =
+            new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+
+                @Override
+                public void onVerificationCompleted(@NonNull PhoneAuthCredential credential) {
+                    // Terjadi jika verifikasi otomatis berhasil (jarang di beberapa device)
+                    signInWithPhoneAuthCredential(credential);
+                }
+
+                @Override
+                public void onVerificationFailed(@NonNull FirebaseException e) {
+                    btnLogin.setEnabled(true);
+                    Toast.makeText(LoginActivity.this, "Verifikasi Gagal: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Log.e("AUTH_FAIL", "Error", e);
+                }
+
+                @Override
+                public void onCodeSent(@NonNull String verificationId,
+                                       @NonNull PhoneAuthProvider.ForceResendingToken token) {
+                    // Kode terkirim! Simpan ID verifikasi
+                    mVerificationId = verificationId;
+                    btnLogin.setEnabled(true);
+
+                    // Tampilkan Dialog Input OTP
+                    showOtpDialog();
+                }
+            };
+
+    // =================================================================
+    // 2. DIALOG INPUT OTP
+    // =================================================================
+    private void showOtpDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Verifikasi OTP");
+        builder.setMessage("Masukkan 6 digit kode yang dikirim via SMS");
+
+        // Input field di dalam dialog
+        final EditText inputCode = new EditText(this);
+        inputCode.setInputType(InputType.TYPE_CLASS_NUMBER);
+        inputCode.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        builder.setView(inputCode);
+
+        builder.setPositiveButton("Verifikasi", (dialog, which) -> {
+            String code = inputCode.getText().toString().trim();
+            if (!code.isEmpty()) {
+                verifyPhoneNumberWithCode(mVerificationId, code);
+            }
+        });
+
+        builder.setNegativeButton("Batal", (dialog, which) -> dialog.dismiss());
+        builder.show();
+    }
+
+    private void verifyPhoneNumberWithCode(String verificationId, String code) {
+        PhoneAuthCredential credential = PhoneAuthProvider.getCredential(verificationId, code);
+        signInWithPhoneAuthCredential(credential);
+    }
+
+    // =================================================================
+    // 3. LOGIN KE FIREBASE
+    // =================================================================
+    private void signInWithPhoneAuthCredential(PhoneAuthCredential credential) {
+        mAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser user = task.getResult().getUser();
+                        if (user != null) {
+
+                            // DISINI PERCABANGANNYA
+                            if (isRegisterFlow) {
+                                // Jika ini proses REGISTER, simpan data yang tadi diinput
+                                saveNewUserToFirestore(user.getUid());
+                            } else {
+                                // Jika ini proses LOGIN, langsung ambil data & masuk
+                                checkUserRole(user.getUid());
+                            }
+
+                        }
+                    } else {
+                        if (task.getException() != null) {
+                            Toast.makeText(LoginActivity.this, "Kode OTP Salah.", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+    }
+
+    // =================================================================
+    // 4. CEK DATA USER DI FIRESTORE (PENGGANTI PHP LOGIN)
+    // =================================================================
+    private void checkUserRole(String uid) {
+        // Ambil data dari koleksi 'users' berdasarkan UID
+        db.collection("users").document(uid).get()
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        DocumentSnapshot document = task.getResult();
+                        if (document.exists()) {
+                            // User terdaftar, ambil datanya
+                            String role = document.getString("role");
+                            String nama = document.getString("nama");
+                            String idRt = document.getString("id_rt");
+
+                            // Simpan ke SharedPreferences (agar logika activity lain tetap jalan)
+                            saveSession(uid, role, nama, idRt);
+
+                            // Redirect
+                            redirectDashboard(role, nama);
+                        } else {
+                            // HAPUS Toast lama, GANTI jadi ini:
+                            showRegisterDialog(uid, mAuth.getCurrentUser().getPhoneNumber());
+                        }
+                    } else {
+                        Toast.makeText(this, "Gagal mengambil data user", Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private void saveSession(String id, String role, String nama, String idRt) {
+        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+        prefs.edit()
+                .putString("id", id)
+                .putString("id_rt", idRt)
+                .putString("nama", nama)
+                .putString("role", role)
+                .apply();
+    }
+
     private void redirectDashboard(String role, String namaUser) {
         Intent intent;
-
-        // Gunakan equalsIgnoreCase agar 'KetuaRT' sama dengan 'ketuart' (untuk jaga-jaga)
-        // Tapi karena DB kamu ENUM, isinya pasti presisi 'KetuaRT' atau 'KetuaRW'
-
-        if (role.equalsIgnoreCase("KetuaRT")) {
-            intent = new Intent(LoginActivity.this, DashboardRtActivity.class);
-        } else if (role.equalsIgnoreCase("KetuaRW")) {
-            intent = new Intent(LoginActivity.this, DashboardRwActivity.class);
+        if (role != null && role.equalsIgnoreCase("KetuaRT")) {
+            intent = new Intent(this, DashboardRtActivity.class);
+        } else if (role != null && role.equalsIgnoreCase("KetuaRW")) {
+            intent = new Intent(this, DashboardRwActivity.class);
         } else {
-            // Default untuk 'Warga' atau jika role kosong
-            intent = new Intent(LoginActivity.this, DashboardActivity.class);
+            intent = new Intent(this, DashboardActivity.class);
         }
-
-        // Kirim nama user sebagai extra data
         intent.putExtra("nama_user", namaUser);
-
-        // Hapus activity login dari stack agar user tidak bisa tekan tombol back kembali ke login
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
     }
+    private void showRegisterDialog(String uid, String phoneNumber) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Lengkapi Data Diri");
+        builder.setCancelable(false); // Gak bisa ditutup paksa
 
-    private void performRegister() {
-        // (Kode register sama seperti sebelumnya, tidak diubah)
-        String nama = inputNamaReg.getText().toString();
-        String telepon = inputPhoneReg.getText().toString();
-        String id_rt = "";
-        if (inputRtReg.getSelectedItem() != null) {
-            id_rt = inputRtReg.getSelectedItem().toString();
-        }
-        String password = inputPassReg.getText().toString();
+        // Bikin Layout Dialog secara program (biar gak ribet bikin XML baru)
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
 
-        if(nama.isEmpty() || telepon.isEmpty() || id_rt.isEmpty() || password.isEmpty()){
-            Toast.makeText(this, "Mohon lengkapi semua data", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        final EditText inputNama = new EditText(this);
+        inputNama.setHint("Nama Lengkap");
+        layout.addView(inputNama);
 
-        String url = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/register.php";
-        String finalIdRt = id_rt;
+        final EditText inputRT = new EditText(this);
+        inputRT.setHint("Nomor RT (Contoh: 01)");
+        inputRT.setInputType(InputType.TYPE_CLASS_NUMBER);
+        layout.addView(inputRT);
 
-        StringRequest request = new StringRequest(Request.Method.POST, url,
-                response -> {
-                    Toast.makeText(this, "Registrasi berhasil dikirim!", Toast.LENGTH_SHORT).show();
-                    Intent intent = new Intent(LoginActivity.this, PendingRegisterActivity.class);
-                    startActivity(intent);
-                },
-                error -> Toast.makeText(this, "Gagal Daftar", Toast.LENGTH_SHORT).show()
-        ){
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("nama", nama);
-                params.put("telepon", telepon);
-                params.put("id_rt", finalIdRt);
-                params.put("password", password);
-                return params;
+        builder.setView(layout);
+
+        builder.setPositiveButton("Simpan", (dialog, which) -> {
+            String nama = inputNama.getText().toString();
+            String rt = inputRT.getText().toString();
+
+            if (nama.isEmpty() || rt.isEmpty()) {
+                Toast.makeText(this, "Nama dan RT harus diisi!", Toast.LENGTH_SHORT).show();
+                return;
             }
-        };
-        Volley.newRequestQueue(this).add(request);
+
+            saveUserData(uid, phoneNumber, nama, rt);
+        });
+
+        builder.show();
+    }
+
+    private void saveNewUserToFirestore(String uid) {
+        java.util.Map<String, Object> user = new java.util.HashMap<>();
+        user.put("nama", pendingNama);      // Dari inputan Tab Daftar
+        user.put("id_rt", pendingRt);       // Dari inputan Tab Daftar
+        user.put("telepon", pendingPhone);
+        user.put("role", "Warga");          // Default
+
+        db.collection("users").document(uid)
+                .set(user)
+                .addOnSuccessListener(aVoid -> {
+                    Toast.makeText(this, "Pendaftaran Berhasil!", Toast.LENGTH_SHORT).show();
+                    // Simpan sesi & Redirect
+                    saveSession(uid, "Warga", pendingNama, pendingRt);
+                    redirectDashboard("Warga", pendingNama);
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Gagal menyimpan data.", Toast.LENGTH_SHORT).show();
+                });
+    }
+    private void saveUserData(String uid, String phone, String nama, String rt) {
+        // Siapkan data untuk disimpan
+        java.util.Map<String, Object> user = new java.util.HashMap<>();
+        user.put("nama", nama);
+        user.put("telepon", phone);
+        user.put("id_rt", rt);
+        user.put("role", "Warga"); // Default role
+
+        // Simpan ke Firestore
+        db.collection("users").document(uid)
+                .set(user)
+                .addOnSuccessListener(aVoid -> {
+                    Toast.makeText(this, "Data tersimpan!", Toast.LENGTH_SHORT).show();
+                    // Simpan sesi lokal
+                    saveSession(uid, "Warga", nama, rt);
+                    // Masuk ke Dashboard
+                    redirectDashboard("Warga", nama);
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Gagal menyimpan data: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 }

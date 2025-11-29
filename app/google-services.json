@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1084463136180",
+    "project_id": "warganyadijagamas",
+    "storage_bucket": "warganyadijagamas.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084463136180:android:84684a59f253f89da846e1",
+        "android_client_info": {
+          "package_name": "com.example.jagawarga"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSy246uvMbGSk4Vc7Vrfrf2fnH6NmDhjc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
