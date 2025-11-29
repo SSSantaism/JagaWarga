@@ -14,9 +14,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-// TAMBAHKAN IMPORT INI
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import android.widget.FrameLayout;
 
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -33,11 +33,14 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import com.google.firebase.auth.FirebaseAuth;
+
 public class DashboardActivity extends AppCompatActivity {
 
     // UI Components
     private LinearLayout menuAbsen, menuTukar, menuLapor, menuJadwal;
     private TextView tvGreeting, tanggalCurrent;
+    private FrameLayout profileContainer;
 
     // Contact card
     private TextView tvContactNumber;
@@ -63,6 +66,7 @@ public class DashboardActivity extends AppCompatActivity {
         initViews();
         setTodayDate();
         setGreeting();
+        setupLogoutLogic();
 
         setupMenuNavigation(menuAbsen, AbsenRondaActivity.class);
         setupMenuNavigation(menuTukar, TukarJadwalActivity.class);
@@ -71,8 +75,6 @@ public class DashboardActivity extends AppCompatActivity {
 
         setupContactCard();
         loadPosRondaForUser();
-
-        // --- PANGGIL FUNGSI LOAD PENGUMUMAN ---
         loadPengumuman();
     }
 
@@ -91,6 +93,7 @@ public class DashboardActivity extends AppCompatActivity {
 
         tvGreeting       = findViewById(R.id.tvGreeting);
         tanggalCurrent   = findViewById(R.id.tanggal_current);
+        profileContainer = findViewById(R.id.profileContainer);
 
         tvContactNumber   = findViewById(R.id.tvContactNumberText);
         tvContactLocation = findViewById(R.id.tvContactLocation);
@@ -127,6 +130,26 @@ public class DashboardActivity extends AppCompatActivity {
                 String todayForApi = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                         .format(Calendar.getInstance().getTime());
                 callApiCloudflare(idRt, todayForApi);
+            });
+        }
+    }
+
+    private void setupLogoutLogic() {
+        if (profileContainer != null) {
+            profileContainer.setOnClickListener(v -> {
+                // 1. Hapus Session Lokal (SharedPreferences)
+                SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+                prefs.edit().clear().apply();
+
+                // 2. Logout dari Firebase Auth
+                FirebaseAuth.getInstance().signOut();
+
+                // 3. Pindah ke Halaman Login & Bersihkan Stack Activity
+                // (Agar user tidak bisa kembali ke dashboard dengan tombol Back)
+                Intent intent = new Intent(DashboardActivity.this, LoginActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(intent);
+                finish();
             });
         }
     }
@@ -200,6 +223,7 @@ public class DashboardActivity extends AppCompatActivity {
         };
         Volley.newRequestQueue(this).add(request);
     }
+
 
     // --- FUNGSI LOAD PENGUMUMAN ---
     private void loadPengumuman() {
