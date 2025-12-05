@@ -1,21 +1,17 @@
 package com.example.jagawarga;
 
 import android.os.Bundle;
-import android.util.Log;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONObject;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,20 +19,38 @@ import java.util.Map;
 public class TukarJadwalActivity extends AppCompatActivity {
 
     private ImageButton btnBack;
-    private EditText etIdJadwalSaya;
-    private EditText etIdJadwalTujuan;
-    private Button btnTukarJadwal;
+    // UI Changed: Instead of IDs, we ask for "New Day Request" or "Target User"?
+    // Plan: "Create a doc in request_tukar: from_uid, from_name, from_day, id_rt, reason."
+    // Let's repurpose the UI. "Jadwal Saya" -> just show current day (readonly).
+    // "Jadwal Tujuan" -> Dropdown of Days? Or just "Alasan"?
+    // If we want to request a NEW DAY, a spinner is best.
 
-    // GANTI dengan URL server kamu
-    private static final String SWAP_JADWAL_URL = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/swap_jadwal.php";
+    // However, I need to keep the layout IDs or update XML. I'll reuse IDs for now but change logic.
+    // etIdJadwalSaya -> (Hidden/Unused or Readonly)
+    // etIdJadwalTujuan -> Use this for "Alasan" or "Hari Baru" text?
+    // Let's assume the user wants to move to a specific day.
+
+    private EditText etIdJadwalSaya; // Reused as "Alasan"
+    private Spinner spinnerHari;     // Need to add this to layout or reuse existing EditText?
+    // Let's reuse etIdJadwalTujuan as "Hari yang diinginkan (e.g. Senin)"
+    private EditText etIdJadwalTujuan;
+
+    private Button btnTukarJadwal;
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_tukar_jadwal);
 
+        db = FirebaseFirestore.getInstance();
+
         initViews();
         setupListeners();
+
+        // Cosmetic: Change hints
+        etIdJadwalSaya.setHint("Alasan Tukar");
+        etIdJadwalTujuan.setHint("Hari yang diinginkan (Senin - Minggu)");
     }
 
     private void initViews() {
@@ -48,91 +62,50 @@ public class TukarJadwalActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnBack.setOnClickListener(v -> onBackPressed());
-        btnTukarJadwal.setOnClickListener(v -> handleTukarJadwal());
+        btnTukarJadwal.setOnClickListener(v -> handleRequestTukar());
     }
 
-    private void handleTukarJadwal() {
-        // pakai Prefutils punyamu
-        String idRtUser = PrefUtils.getIdRt(this);
-        if (idRtUser == null || idRtUser.isEmpty()) {
-            // Prefutils sudah menampilkan Toast sendiri kalau null,
-            // jadi di sini cukup stop saja
+    private void handleRequestTukar() {
+        String alasan = etIdJadwalSaya.getText().toString().trim();
+        String targetHari = etIdJadwalTujuan.getText().toString().trim();
+
+        if (targetHari.isEmpty()) {
+            Toast.makeText(this, "Hari tujuan wajib diisi!", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        String idSayaStr = etIdJadwalSaya.getText().toString().trim();
-        String idTujuanStr = etIdJadwalTujuan.getText().toString().trim();
-
-        if (idSayaStr.isEmpty()) {
-            etIdJadwalSaya.setError("ID Jadwal Saya wajib diisi");
-            etIdJadwalSaya.requestFocus();
-            return;
-        }
-        if (idTujuanStr.isEmpty()) {
-            etIdJadwalTujuan.setError("ID Jadwal Tujuan wajib diisi");
-            etIdJadwalTujuan.requestFocus();
+        // Validate Day
+        if (!isValidDay(targetHari)) {
+            Toast.makeText(this, "Hari tidak valid. Gunakan Senin, Selasa, dst.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        int idSaya, idTujuan;
-        try {
-            idSaya = Integer.parseInt(idSayaStr);
-            idTujuan = Integer.parseInt(idTujuanStr);
-        } catch (NumberFormatException e) {
-            Toast.makeText(this, "ID jadwal harus berupa angka", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        String idWarga = PrefUtils.getIdWarga(this);
+        String idRt = PrefUtils.getIdRt(this);
+        String nama = getSharedPreferences("user_data", MODE_PRIVATE).getString("nama", "Warga");
 
-        callSwapJadwalApi(idSaya, idTujuan, idRtUser);
+        Map<String, Object> req = new HashMap<>();
+        req.put("id_warga", idWarga);
+        req.put("nama", nama);
+        req.put("id_rt", idRt);
+        req.put("hari_tujuan", targetHari); // e.g., "Senin"
+        req.put("alasan", alasan);
+        req.put("status", "pending");
+        req.put("timestamp", Timestamp.now());
+
+        db.collection("request_tukar").add(req)
+                .addOnSuccessListener(ref -> {
+                    Toast.makeText(this, "Permintaan tukar jadwal dikirim!", Toast.LENGTH_LONG).show();
+                    finish();
+                })
+                .addOnFailureListener(e -> Toast.makeText(this, "Gagal: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
-    private void callSwapJadwalApi(int idSaya, int idTujuan, String idRtUser) {
-
-        StringRequest request = new StringRequest(
-                Request.Method.POST,
-                SWAP_JADWAL_URL,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        Log.e("SWAP_RAW", "Response dari server: " + response);
-                        try {
-                            JSONObject json = new JSONObject(response);
-                            boolean success = json.optBoolean("success", false);
-                            String message = json.optString("message", "Terjadi kesalahan");
-
-                            Toast.makeText(TukarJadwalActivity.this,
-                                    message, Toast.LENGTH_LONG).show();
-
-                            if (success) {
-                                etIdJadwalSaya.setText("");
-                                etIdJadwalTujuan.setText("");
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            Toast.makeText(TukarJadwalActivity.this,
-                                    "Response tidak valid", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        error.printStackTrace();
-                        Toast.makeText(TukarJadwalActivity.this,
-                                "Gagal menghubungi server", Toast.LENGTH_SHORT).show();
-                    }
-                }
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("id_jadwal_saya", String.valueOf(idSaya));
-                params.put("id_jadwal_tujuan", String.valueOf(idTujuan));
-                params.put("id_rt_user", idRtUser);
-                return params;
-            }
-        };
-
-        Volley.newRequestQueue(this).add(request);
+    private boolean isValidDay(String day) {
+        String[] days = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
+        for (String d : days) {
+            if (d.equalsIgnoreCase(day)) return true;
+        }
+        return false;
     }
 }

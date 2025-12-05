@@ -15,13 +15,9 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
 import com.example.jagawarga.databinding.ActivityLaporanKeamananBinding;
-import com.example.jagawarga.databinding.ActivityLoginBinding;
-
-import org.json.JSONObject;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -33,15 +29,15 @@ public class LaporanKeamananActivity extends AppCompatActivity {
 
     private Spinner spinnerJenisLaporan;
     private ActivityLaporanKeamananBinding binding;
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_laporan_keamanan); // pastikan nama layout benar
-
         binding = ActivityLaporanKeamananBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
+        db = FirebaseFirestore.getInstance();
 
         // inisialisasi view
         spinnerJenisLaporan = findViewById(R.id.spinnerJenisLaporan);
@@ -75,8 +71,6 @@ public class LaporanKeamananActivity extends AppCompatActivity {
         inputTanggalLaporan.setText(tanggalWaktu);
         inputTanggalLaporan.setFocusable(false);
         inputTanggalLaporan.setClickable(false);
-
-
     }
 
     // --- Logic dropdown Jenis Laporan ---
@@ -103,74 +97,40 @@ public class LaporanKeamananActivity extends AppCompatActivity {
     private void setupBackButton(ImageButton btnBack) {
         if (btnBack == null) return;
 
-        btnBack.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // karena activity ini dipanggil dari Dashboard,
-                // finish() akan menutup activity ini dan kembali ke DashboardActivity
-                finish();
-            }
-        });
+        btnBack.setOnClickListener(v -> finish());
     }
+
     private void kirimLaporan() {
 
         String isi = binding.inputDetailLaporan.getText().toString();
         String jenis = binding.spinnerJenisLaporan.getSelectedItem().toString();
 
-        // ambil id_warga yang disimpan setelah login
         SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
         String idWarga = prefs.getString("id", null);
+        String idRt = prefs.getString("id_rt", null);
+        String nama = prefs.getString("nama", "Warga");
 
-        if (idWarga == null) {
-            Toast.makeText(this, "Error: id_warga tidak ditemukan. User belum login?", Toast.LENGTH_LONG).show();
+        if (idWarga == null || idRt == null) {
+            Toast.makeText(this, "Error: id_warga/id_rt tidak ditemukan. User belum login?", Toast.LENGTH_LONG).show();
             return;
         }
 
-        String url = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/laporan.php";
+        Map<String, Object> laporan = new HashMap<>();
+        laporan.put("id_warga", idWarga);
+        laporan.put("nama_pelapor", nama);
+        laporan.put("id_rt", idRt);
+        laporan.put("isi_laporan", isi);
+        laporan.put("jenis_laporan", jenis);
+        laporan.put("tanggal", Timestamp.now());
 
-        StringRequest request = new StringRequest(Request.Method.POST, url,
-                response -> {
-                    Log.d("API_LAPORAN", response);
-
-                    try {
-                        JSONObject obj = new JSONObject(response);
-
-                        if (obj.getString("status").equals("success")) {
-                            Toast.makeText(this, "Laporan berhasil dikirim!", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(this, obj.getString("message"), Toast.LENGTH_LONG).show();
-                        }
-
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Parsing error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                },
-
-                error -> {
-                    Log.e("API_LAPORAN_ERR", "Error: " + error.toString());
-                    Toast.makeText(this, "Gagal mengirim laporan", Toast.LENGTH_LONG).show();
-                }
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-
-                params.put("id_warga", idWarga);  // dikirim manual (karena Android tidak punya session)
-                params.put("isi_laporan", isi);
-                params.put("jenis_laporan", jenis);
-
-                return params;
-            }
-
-            @Override
-            public Map<String, String> getHeaders() {
-                Map<String, String> headers = new HashMap<>();
-                headers.put("User-Agent", "Mozilla/5.0 (Android)");
-                return headers;
-            }
-        };
-
-        Volley.newRequestQueue(this).add(request);
+        db.collection("laporan").add(laporan)
+                .addOnSuccessListener(ref -> {
+                    Toast.makeText(this, "Laporan berhasil dikirim!", Toast.LENGTH_SHORT).show();
+                    finish();
+                })
+                .addOnFailureListener(e -> {
+                     Log.e("FIRESTORE_LAPORAN", "Error: " + e.getMessage());
+                    Toast.makeText(this, "Gagal mengirim laporan: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
     }
-
 }

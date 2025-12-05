@@ -243,11 +243,18 @@ public class LoginActivity extends AppCompatActivity {
      * Simpan data detail (Nama, RT, NoHP asli) ke Firestore setelah register Auth berhasil
      */
     private void saveUserDataToFirestore(String uid, String phone, String nama, String rt) {
+        // Pilih jadwal hari secara acak
+        String[] days = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
+        String randomDay = days[(int) (Math.random() * days.length)];
+
         Map<String, Object> user = new HashMap<>();
         user.put("nama", nama);
         user.put("telepon", phone);
         user.put("id_rt", rt);
         user.put("role", "Warga");
+        user.put("jadwal_hari", randomDay);
+        user.put("status_warga", "pending");
+        user.put("createdAt", com.google.firebase.Timestamp.now());
 
         db.collection("users").document(uid)
                 .set(user)

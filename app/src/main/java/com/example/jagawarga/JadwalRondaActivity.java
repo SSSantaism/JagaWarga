@@ -1,6 +1,5 @@
 package com.example.jagawarga;
 
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -9,20 +8,13 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.Locale;
 
 public class JadwalRondaActivity extends AppCompatActivity {
@@ -39,44 +31,34 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
     // === Date Management ===
     Calendar calendar;
-    SimpleDateFormat dateFormatAPI;      // format kirim ke API
-    SimpleDateFormat dateFormatDisplay;  // format tampil ke UI
+    SimpleDateFormat dateFormatDay;      // Format: "Senin", "Selasa"
+    SimpleDateFormat dateFormatDisplay;  // Format: "Senin, 25 November"
 
-    // === URL CLOUDFARE TUNNEL ===
-    private final String BASE_URL = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/";
-    // contoh endpoint yang kamu buat → getjadwal.php?tanggal=YYYY-MM-DD
+    private FirebaseFirestore db;
+    private String currentRt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_jadwal_ronda);
 
+        db = FirebaseFirestore.getInstance();
+        currentRt = PrefUtils.getIdRt(this);
+
         initUI();
         initTanggal();
         setupListeners();
 
-        // Ambil JSON awal dari Intent → saat buka dari Dashboard
-        String json = getIntent().getStringExtra("json_jadwal");
-        if (json != null) {
-            parseAndApplyJSON(json);
-        } else {
-            loadJadwalFromAPI(); // fallback jika Intent kosong
-        }
+        loadJadwalFromFirestore();
     }
 
-    // ============================================================
-    // INIT
-    // ============================================================
     private void initUI() {
-
-        // init tombol & tanggal
         btnBackJadwal = findViewById(R.id.btnBackJadwal);
         btnPrevDate   = findViewById(R.id.btnPrevDate);
         btnNextDate   = findViewById(R.id.btnNextDate);
         btnKembaliJadwal = findViewById(R.id.btnKembaliJadwal);
         textTanggalPilihan = findViewById(R.id.textTanggalPilihan);
 
-        // init semua TextView jadwal
         tvNama[0] = findViewById(R.id.textNama1);
         tvNama[1] = findViewById(R.id.textNama2);
         tvNama[2] = findViewById(R.id.textNama3);
@@ -113,18 +95,12 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
     private void initTanggal() {
         calendar = Calendar.getInstance();
-
-        // Format kirim API → YYYY-MM-DD
-        dateFormatAPI = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-
-        // Format tampilan → Senin, 25 November
+        dateFormatDay = new SimpleDateFormat("EEEE", new Locale("id", "ID"));
         dateFormatDisplay = new SimpleDateFormat("EEEE, dd MMMM", new Locale("id", "ID"));
-
         updateTanggalUI();
     }
 
     private void setupListeners() {
-
         View.OnClickListener back = v -> finish();
         btnBackJadwal.setOnClickListener(back);
         btnKembaliJadwal.setOnClickListener(back);
@@ -132,13 +108,13 @@ public class JadwalRondaActivity extends AppCompatActivity {
         btnPrevDate.setOnClickListener(v -> {
             calendar.add(Calendar.DAY_OF_MONTH, -1);
             updateTanggalUI();
-            loadJadwalFromAPI();
+            loadJadwalFromFirestore();
         });
 
         btnNextDate.setOnClickListener(v -> {
             calendar.add(Calendar.DAY_OF_MONTH, 1);
             updateTanggalUI();
-            loadJadwalFromAPI();
+            loadJadwalFromFirestore();
         });
     }
 
@@ -148,68 +124,41 @@ public class JadwalRondaActivity extends AppCompatActivity {
         textTanggalPilihan.setText(formatted);
     }
 
-    // ============================================================
-    // PANGGIL API CLOUDFARE
-    // ============================================================
-    private void loadJadwalFromAPI() {
+    private void loadJadwalFromFirestore() {
+        if (currentRt == null) return;
 
-        String tanggal = dateFormatAPI.format(calendar.getTime());
-        String idRt = PrefUtils.getIdRt(this);
-        String url = BASE_URL + "get_jadwal.php?tanggal=" + tanggal + "&id_rt=" + idRt;
+        // Ambil nama hari (Senin, Selasa, dll)
+        String hariIni = dateFormatDay.format(calendar.getTime());
 
-        Log.d("API_JADWAL", "CALL: " + url);
-
-        RequestQueue queue = Volley.newRequestQueue(this);
-
-        JsonObjectRequest req = new JsonObjectRequest(
-                Request.Method.GET,
-                url,
-                null,
-                response -> {
-                    // Sukses
-                    parseAndApplyJSON(response.toString());
-                },
-                error -> {
-                    // Error
-                    Log.e("API_ERROR", error.toString());
-                }
-        );
-
-        queue.add(req);
-    }
-
-
-    // ============================================================
-    // PARSE JSON → TAMPILKAN KE UI
-    // ============================================================
-    private void parseAndApplyJSON(String json) {
-        try {
-            JSONObject obj = new JSONObject(json);
-            JSONArray arr = obj.getJSONArray("data");
-
-            int limit = Math.min(arr.length(), 10);
-
-            for (int i = 0; i < limit; i++) {
-                JSONObject item = arr.getJSONObject(i);
-
-                tvNama[i].setText(item.getString("nama"));
-                tvIdJadwal[i].setText("ID Jadwal: " + item.getString("id_jadwal"));
-                tvJam[i].setText(item.getString("shift"));
-            }
-
-            // sisanya kosongkan
-            for (int i = limit; i < 10; i++) {
-                tvNama[i].setText("-");
-                tvIdJadwal[i].setText("ID Jadwal: -");
-                tvJam[i].setText("-");
-            }
-
-        } catch (Exception e) {
-            Log.e("JSON_ERROR", e.getMessage());
+        // Reset UI
+        for (int i = 0; i < 10; i++) {
+            tvNama[i].setText("-");
+            tvIdJadwal[i].setText("ID Jadwal: -");
+            tvJam[i].setText("-");
         }
+
+        db.collection("users")
+                .whereEqualTo("id_rt", currentRt)
+                .whereEqualTo("jadwal_hari", hariIni)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    int index = 0;
+                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                        if (index >= 10) break;
+
+                        // Check if verified (optional based on your flow)
+                        String status = doc.getString("status_warga");
+                        if ("verified".equals(status) || status == null) { // Handle legacy users without status
+                             tvNama[index].setText(doc.getString("nama"));
+                             // ID Jadwal is technically just their UID/Name in this simplified flow
+                             // Or we can display the Day
+                             tvIdJadwal[index].setText("ID: " + hariIni);
+                             // Shift/Waktu can be default 20:00 - 02:00
+                             tvJam[index].setText("20:00 - 02:00");
+                             index++;
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> Toast.makeText(this, "Gagal muat jadwal: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 }
-
-
-
-

@@ -13,12 +13,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.android.volley.Request;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,106 +24,89 @@ public class ListPermintaanActivity extends AppCompatActivity {
     private LinearLayout containerList;
     private ImageButton btnBack;
     private Button btnTabAbsensi, btnTabRegister;
-
-    // --- URL API REGISTER ---
-    private String URL_GET_PENDING_REG = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/get_pending_users.php";
-    private String URL_VALIDATE_REG    = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/validate_user.php";
-
-    // --- URL API ABSENSI (BARU) ---
-    private String URL_GET_PENDING_ABSEN = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/get_pending_absen.php";
-    private String URL_VALIDATE_ABSEN    = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/validate_absen.php";
+    private Button btnTabTukar; // New Tab
 
     private String currentIdRt = "";
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_list_permintaan_register); // Pastikan nama layout XML benar
+        setContentView(R.layout.activity_list_permintaan_register);
 
         // Init Views
         btnBack = findViewById(R.id.btnBack);
         containerList = findViewById(R.id.containerList);
         btnTabAbsensi = findViewById(R.id.btnTabAbsensi);
         btnTabRegister = findViewById(R.id.btnTabRegister);
+        // Assuming layout XML might not have this button yet, I will add it if I edit XML,
+        // but for now let's just use the existing 2 tabs or repurpose one if needed.
+        // Wait, the plan mentioned "Swap Request" in list permintaan.
+        // I will stick to 2 tabs for now and maybe add swap requests in "Absensi" tab or a new logic.
+        // Let's keep it simple: 2 tabs. Swap requests can appear in "Register" tab or "Absensi"?
+        // Actually, let's just implement Register & Absen first as per plan step.
 
-        // Ambil ID RT
+        db = FirebaseFirestore.getInstance();
         currentIdRt = PrefUtils.getIdRt(this);
 
         btnBack.setOnClickListener(v -> finish());
 
-        // --- SETUP TABS ---
-
         // 1. Klik Tab Register
         btnTabRegister.setOnClickListener(v -> {
-            updateTabUI(true); // true = Register aktif
+            updateTabUI(true);
             if (currentIdRt != null) loadPendingRegister(currentIdRt);
         });
 
         // 2. Klik Tab Absensi
         btnTabAbsensi.setOnClickListener(v -> {
-            updateTabUI(false); // false = Absensi aktif
+            updateTabUI(false);
             if (currentIdRt != null) loadPendingAbsen(currentIdRt);
         });
 
-        // Default Load pertama kali: Register
+        // Default Load
         updateTabUI(true);
         if (currentIdRt != null) loadPendingRegister(currentIdRt);
     }
 
-    // Ubah warna tombol tab agar user tau mana yang aktif
     private void updateTabUI(boolean isRegisterActive) {
         if (isRegisterActive) {
-            // Tab Register Putih, Absen Transparan
             btnTabRegister.setBackgroundResource(R.drawable.rounded_button_white);
             btnTabRegister.setTextColor(ContextCompat.getColor(this, R.color.black));
-
             btnTabAbsensi.setBackgroundResource(android.R.color.transparent);
             btnTabAbsensi.setTextColor(ContextCompat.getColor(this, R.color.gray));
         } else {
-            // Tab Absen Putih, Register Transparan
             btnTabAbsensi.setBackgroundResource(R.drawable.rounded_button_white);
             btnTabAbsensi.setTextColor(ContextCompat.getColor(this, R.color.black));
-
             btnTabRegister.setBackgroundResource(android.R.color.transparent);
             btnTabRegister.setTextColor(ContextCompat.getColor(this, R.color.gray));
         }
-        // Bersihkan list saat pindah tab
         containerList.removeAllViews();
     }
 
     // =================================================================
-    // LOGIC PERMINTAAN REGISTER
+    // LOGIC PERMINTAAN REGISTER (Firestore)
     // =================================================================
     private void loadPendingRegister(String idRt) {
-        String url = URL_GET_PENDING_REG + "?id_rt=" + idRt;
+        db.collection("users")
+                .whereEqualTo("id_rt", idRt)
+                .whereEqualTo("status_warga", "pending")
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    containerList.removeAllViews();
+                    if (queryDocumentSnapshots.isEmpty()) {
+                        Toast.makeText(this, "Tidak ada register baru", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-        StringRequest request = new StringRequest(Request.Method.GET, url,
-                response -> {
-                    try {
-                        JSONObject object = new JSONObject(response);
-                        if (object.getBoolean("success")) {
-                            JSONArray array = object.getJSONArray("data");
-                            containerList.removeAllViews(); // Clear
+                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                        String idWarga = doc.getId();
+                        String nama = doc.getString("nama");
+                        String telp = doc.getString("telepon");
 
-                            if (array.length() == 0) {
-                                Toast.makeText(this, "Tidak ada register baru", Toast.LENGTH_SHORT).show();
-                            }
-
-                            for (int i = 0; i < array.length(); i++) {
-                                JSONObject user = array.getJSONObject(i);
-                                addItemRegister(
-                                        user.getString("id_warga"),
-                                        user.getString("nama"),
-                                        user.getString("telepon")
-                                );
-                            }
-                        }
-                    } catch (Exception e) { e.printStackTrace(); }
-                },
-                error -> Toast.makeText(this, "Gagal memuat register", Toast.LENGTH_SHORT).show()
-        );
-        request.setShouldCache(false);
-        Volley.newRequestQueue(this).add(request);
+                        addItemRegister(idWarga, nama, telp);
+                    }
+                })
+                .addOnFailureListener(e -> Toast.makeText(this, "Gagal memuat: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
     private void addItemRegister(String idWarga, String nama, String telp) {
@@ -141,49 +120,60 @@ public class ListPermintaanActivity extends AppCompatActivity {
         tvNama.setText(nama);
         tvTelp.setText(telp);
 
-        btnAcc.setOnClickListener(v -> processValidation(URL_VALIDATE_REG, "id_warga", idWarga, "accept", itemView));
-        btnReject.setOnClickListener(v -> processValidation(URL_VALIDATE_REG, "id_warga", idWarga, "reject", itemView));
+        btnAcc.setOnClickListener(v -> {
+            db.collection("users").document(idWarga)
+                    .update("status_warga", "verified")
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "Warga diterima", Toast.LENGTH_SHORT).show();
+                        containerList.removeView(itemView);
+                    })
+                    .addOnFailureListener(e -> Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+        });
+
+        btnReject.setOnClickListener(v -> {
+            // Delete user or set status rejected
+            db.collection("users").document(idWarga)
+                    .delete() // Simple rejection: delete the doc (User must register again)
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "Warga ditolak", Toast.LENGTH_SHORT).show();
+                        containerList.removeView(itemView);
+                    });
+        });
 
         containerList.addView(itemView);
     }
 
     // =================================================================
-    // LOGIC PERMINTAAN ABSENSI (NEW)
+    // LOGIC PERMINTAAN ABSENSI (Firestore)
     // =================================================================
     private void loadPendingAbsen(String idRt) {
-        String url = URL_GET_PENDING_ABSEN + "?id_rt=" + idRt;
+        db.collection("absensi")
+                .whereEqualTo("id_rt", idRt)
+                .whereEqualTo("status", "pending")
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    containerList.removeAllViews();
+                    if (queryDocumentSnapshots.isEmpty()) {
+                        Toast.makeText(this, "Tidak ada absen pending", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-        StringRequest request = new StringRequest(Request.Method.GET, url,
-                response -> {
-                    try {
-                        JSONObject object = new JSONObject(response);
-                        if (object.getBoolean("success")) {
-                            JSONArray array = object.getJSONArray("data");
-                            containerList.removeAllViews(); // Clear
+                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                        String idAbsen = doc.getId();
+                        String nama = doc.getString("nama");
+                        // Convert Timestamp to readable time if needed, or string
+                        Object waktuObj = doc.get("waktu");
+                        String waktuStr = waktuObj != null ? waktuObj.toString() : "-";
 
-                            if (array.length() == 0) {
-                                Toast.makeText(this, "Tidak ada absen pending", Toast.LENGTH_SHORT).show();
-                            }
+                        // If it's a Timestamp, formatting would be better, but for now toString()
 
-                            for (int i = 0; i < array.length(); i++) {
-                                JSONObject item = array.getJSONObject(i);
-                                addItemAbsen(
-                                        item.getString("id_absen"),
-                                        item.getString("nama_warga"),
-                                        item.getString("waktu")
-                                );
-                            }
-                        }
-                    } catch (Exception e) { e.printStackTrace(); }
-                },
-                error -> Toast.makeText(this, "Gagal memuat absen", Toast.LENGTH_SHORT).show()
-        );
-        request.setShouldCache(false);
-        Volley.newRequestQueue(this).add(request);
+                        addItemAbsen(idAbsen, nama, waktuStr);
+                    }
+                })
+                .addOnFailureListener(e -> Toast.makeText(this, "Gagal memuat: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
     private void addItemAbsen(String idAbsen, String nama, String waktu) {
-        // Gunakan layout baru: item_request_absen
         View itemView = LayoutInflater.from(this).inflate(R.layout.item_request_absen, containerList, false);
 
         TextView tvNama = itemView.findViewById(R.id.tvNamaWargaAbsen);
@@ -194,40 +184,24 @@ public class ListPermintaanActivity extends AppCompatActivity {
         tvNama.setText(nama);
         tvWaktu.setText("Pukul: " + waktu);
 
-        // Panggil API Validasi Absen
-        // Param key di PHP validate_absen adalah 'id_absen'
-        btnAcc.setOnClickListener(v -> processValidation(URL_VALIDATE_ABSEN, "id_absen", idAbsen, "accept", itemView));
-        btnReject.setOnClickListener(v -> processValidation(URL_VALIDATE_ABSEN, "id_absen", idAbsen, "reject", itemView));
+        btnAcc.setOnClickListener(v -> {
+            db.collection("absensi").document(idAbsen)
+                    .update("status", "verified")
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "Absen diterima", Toast.LENGTH_SHORT).show();
+                        containerList.removeView(itemView);
+                    });
+        });
+
+        btnReject.setOnClickListener(v -> {
+             db.collection("absensi").document(idAbsen)
+                    .update("status", "rejected")
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "Absen ditolak", Toast.LENGTH_SHORT).show();
+                        containerList.removeView(itemView);
+                    });
+        });
 
         containerList.addView(itemView);
-    }
-
-    // =================================================================
-    // METHOD VALIDASI REUSABLE (Bisa untuk Register & Absen)
-    // =================================================================
-    private void processValidation(String url, String idKey, String idValue, String action, View itemView) {
-        StringRequest request = new StringRequest(Request.Method.POST, url,
-                response -> {
-                    try {
-                        JSONObject obj = new JSONObject(response);
-                        if (obj.getBoolean("success")) {
-                            Toast.makeText(this, "Berhasil: " + action, Toast.LENGTH_SHORT).show();
-                            containerList.removeView(itemView); // Hapus dari layar
-                        } else {
-                            Toast.makeText(this, "Gagal: " + obj.getString("message"), Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) { e.printStackTrace(); }
-                },
-                error -> Toast.makeText(this, "Koneksi Error", Toast.LENGTH_SHORT).show()
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put(idKey, idValue); // id_warga atau id_absen
-                params.put("action", action);
-                return params;
-            }
-        };
-        Volley.newRequestQueue(this).add(request);
     }
 }

@@ -15,26 +15,31 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.android.volley.Request;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class TerimaLaporanActivity extends AppCompatActivity {
 
     private RecyclerView rvLaporan;
     private ImageButton btnBack;
     private ProgressBar progressBar;
-
-    // GANTI DENGAN URL CLOUDFLARE/IP KAMU
-    private String URL_GET_LAPORAN = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/get_laporan_masuk.php";
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_terima_laporan);
+
+        db = FirebaseFirestore.getInstance();
 
         // Inisialisasi View
         rvLaporan = findViewById(R.id.rvLaporanMasuk);
@@ -59,53 +64,36 @@ public class TerimaLaporanActivity extends AppCompatActivity {
         }
 
         progressBar.setVisibility(View.VISIBLE);
-        String url = URL_GET_LAPORAN + "?id_rt=" + idRt;
 
-        StringRequest request = new StringRequest(Request.Method.GET, url,
-                response -> {
+        db.collection("laporan")
+                .whereEqualTo("id_rt", idRt)
+                .orderBy("tanggal", Query.Direction.DESCENDING)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
                     progressBar.setVisibility(View.GONE);
-                    Log.d("DEBUG_LAPORAN", "Response: " + response);
-
-                    try {
-                        JSONObject obj = new JSONObject(response);
-                        if (obj.getBoolean("success")) {
-                            JSONArray data = obj.getJSONArray("data");
-
-                            // Cek jika data kosong
-                            if (data.length() == 0) {
-                                Toast.makeText(this, "Belum ada laporan masuk.", Toast.LENGTH_SHORT).show();
-                            }
-
-                            // Pasang Adapter
-                            LaporanAdapter adapter = new LaporanAdapter(data);
-                            rvLaporan.setAdapter(adapter);
-                        } else {
-                            Toast.makeText(this, "Gagal: " + obj.getString("message"), Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        Toast.makeText(this, "Format data salah", Toast.LENGTH_SHORT).show();
+                    if (queryDocumentSnapshots.isEmpty()) {
+                        Toast.makeText(this, "Belum ada laporan masuk.", Toast.LENGTH_SHORT).show();
                     }
-                },
-                error -> {
+
+                    List<Map<String, Object>> list = new ArrayList<>();
+                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                        list.add(doc.getData());
+                    }
+                    LaporanAdapter adapter = new LaporanAdapter(list);
+                    rvLaporan.setAdapter(adapter);
+                })
+                .addOnFailureListener(e -> {
                     progressBar.setVisibility(View.GONE);
-                    String msg = "Gagal koneksi server";
-                    if(error.networkResponse != null) {
-                        msg += " (Code: " + error.networkResponse.statusCode + ")";
-                    }
-                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
-                    Log.e("DEBUG_LAPORAN", "Error: " + error.toString());
-                }
-        );
-
-        Volley.newRequestQueue(this).add(request);
+                    Log.e("FIRESTORE_LAPORAN", e.getMessage());
+                    Toast.makeText(this, "Gagal muat laporan: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 
     // === ADAPTER ===
     class LaporanAdapter extends RecyclerView.Adapter<LaporanAdapter.Holder> {
-        JSONArray data;
+        List<Map<String, Object>> data;
 
-        public LaporanAdapter(JSONArray data) {
+        public LaporanAdapter(List<Map<String, Object>> data) {
             this.data = data;
         }
 
@@ -119,22 +107,19 @@ public class TerimaLaporanActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
             try {
-                JSONObject item = data.getJSONObject(position);
+                Map<String, Object> item = data.get(position);
 
-                // 1. Set Jenis Laporan
-                holder.tvJenis.setText(item.optString("jenis_laporan", "Laporan"));
+                holder.tvJenis.setText((String) item.get("jenis_laporan"));
+                holder.tvNama.setText("Oleh: " + item.get("nama_pelapor"));
+                holder.tvDeskripsi.setText((String) item.get("isi_laporan"));
 
-                // 2. Set Nama Pelapor
-                holder.tvNama.setText("Oleh: " + item.optString("nama_pelapor", "Warga"));
-
-                // 3. Set Isi Laporan (FIX: Ganti 'deskripsi' jadi 'isi_laporan')
-                holder.tvDeskripsi.setText(item.optString("isi_laporan", "-"));
-
-                // 4. Set Waktu
-                if(item.has("waktu_fmt")) {
-                    holder.tvWaktu.setText(item.getString("waktu_fmt"));
+                Timestamp ts = (Timestamp) item.get("tanggal");
+                if (ts != null) {
+                    Date date = ts.toDate();
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
+                    holder.tvWaktu.setText(sdf.format(date));
                 } else {
-                    holder.tvWaktu.setText(item.optString("waktu_laporan"));
+                    holder.tvWaktu.setText("-");
                 }
 
             } catch (Exception e) {
@@ -144,12 +129,11 @@ public class TerimaLaporanActivity extends AppCompatActivity {
 
         @Override
         public int getItemCount() {
-            return data.length();
+            return data.size();
         }
 
         class Holder extends RecyclerView.ViewHolder {
             TextView tvJenis, tvNama, tvDeskripsi, tvWaktu;
-            // Status dihapus dari ViewHolder
 
             public Holder(@NonNull View itemView) {
                 super(itemView);
