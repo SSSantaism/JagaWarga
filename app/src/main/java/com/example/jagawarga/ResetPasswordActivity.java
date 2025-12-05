@@ -10,15 +10,8 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 public class ResetPasswordActivity extends AppCompatActivity {
 
@@ -35,6 +28,21 @@ public class ResetPasswordActivity extends AppCompatActivity {
 
         initViews();
         setupListeners();
+
+        // Since we can only reset current user's password easily with Firebase Client SDK,
+        // we check if user is logged in. If not, we can't do much with "Fake Email" auth.
+        // We will assume this is "Change Password" feature for logged in user.
+        // If meant for "Forgot Password", it's limited.
+
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            Toast.makeText(this, "Fitur ini hanya untuk mengubah password saat login. Jika lupa password, hubungi Admin/RT.", Toast.LENGTH_LONG).show();
+            // finish(); // Don't close immediately so they can read toast, but maybe disable button
+            btnReset.setEnabled(false);
+        } else {
+             inputPhone.setText(user.getEmail()); // Just show email/ID
+             inputPhone.setEnabled(false); // Can't change target user
+        }
     }
 
     private void initViews() {
@@ -43,71 +51,48 @@ public class ResetPasswordActivity extends AppCompatActivity {
         btnReset = findViewById(R.id.btnReset);
         btnBack = findViewById(R.id.btnBack);
         btnTogglePass = findViewById(R.id.btnTogglePass);
+
+        btnReset.setText("Ubah Password");
     }
 
     private void setupListeners() {
-        // Tombol Kembali
         btnBack.setOnClickListener(v -> finish());
 
-        // Toggle Password (Lihat/Sembunyikan)
         btnTogglePass.setOnClickListener(v -> {
             if (isPasswordVisible) {
                 inputPass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                btnTogglePass.setImageResource(R.drawable.icon_mata2); // Pastikan icon ini ada
+                btnTogglePass.setImageResource(R.drawable.icon_mata2);
             } else {
                 inputPass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-                btnTogglePass.setImageResource(R.drawable.icon_mata1); // Pastikan icon ini ada
+                btnTogglePass.setImageResource(R.drawable.icon_mata1);
             }
             inputPass.setSelection(inputPass.getText().length());
             isPasswordVisible = !isPasswordVisible;
         });
 
-        // Tombol Reset
         btnReset.setOnClickListener(v -> {
-            String phone = inputPhone.getText().toString().trim();
             String newPass = inputPass.getText().toString().trim();
 
-            if (phone.isEmpty() || newPass.isEmpty()) {
-                Toast.makeText(this, "Isi nomor telepon dan password baru!", Toast.LENGTH_SHORT).show();
+            if (newPass.isEmpty()) {
+                Toast.makeText(this, "Isi password baru!", Toast.LENGTH_SHORT).show();
             } else {
-                resetPassword(phone, newPass);
+                changePassword(newPass);
             }
         });
     }
 
-    private void resetPassword(String phone, String newPass) {
-        // Ganti URL sesuai server Anda
-        String url = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/change_password.php";
-
-        StringRequest request = new StringRequest(Request.Method.POST, url,
-                response -> {
-                    try {
-                        JSONObject jsonObject = new JSONObject(response);
-                        String status = jsonObject.getString("status");
-                        String message = jsonObject.getString("message");
-
-                        if (status.equals("success")) {
-                            Toast.makeText(this, "Password berhasil diubah! Silakan login.", Toast.LENGTH_LONG).show();
-                            finish(); // Kembali ke login
+    private void changePassword(String newPass) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null) {
+            user.updatePassword(newPass)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            Toast.makeText(this, "Password berhasil diubah", Toast.LENGTH_SHORT).show();
+                            finish();
                         } else {
-                            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this, "Gagal: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                         }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                        Toast.makeText(this, "Error parsing server response", Toast.LENGTH_SHORT).show();
-                    }
-                },
-                error -> Toast.makeText(this, "Gagal menghubungi server: " + error.getMessage(), Toast.LENGTH_SHORT).show()
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("telepon", phone);
-                params.put("new_password", newPass);
-                return params;
-            }
-        };
-
-        Volley.newRequestQueue(this).add(request);
+                    });
+        }
     }
 }

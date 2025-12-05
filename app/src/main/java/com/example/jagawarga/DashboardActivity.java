@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -16,24 +17,21 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import android.widget.FrameLayout;
-
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class DashboardActivity extends AppCompatActivity {
 
@@ -54,13 +52,14 @@ public class DashboardActivity extends AppCompatActivity {
     private String idWarga, idRt, namaUser;
     private String currentPosPhone = null;
 
-    private static final String BASE_URL = "https://newsletter-cod-jeff-cement.trycloudflare.com/jagawarga/";
-    private static final String GET_POS_RONDA_URL = BASE_URL + "get_pos_ronda.php";
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
+
+        db = FirebaseFirestore.getInstance();
 
         loadUserData();
         initViews();
@@ -99,9 +98,7 @@ public class DashboardActivity extends AppCompatActivity {
         tvContactLocation = findViewById(R.id.tvContactLocation);
         imgWhatsapp   = findViewById(R.id.imgWhatsapp);
 
-        // --- INISIALISASI RECYCLER VIEW ---
         rvPengumuman = findViewById(R.id.rvPengumuman);
-        // Penting: Set Layout Manager
         rvPengumuman.setLayoutManager(new LinearLayoutManager(this));
     }
 
@@ -124,49 +121,22 @@ public class DashboardActivity extends AppCompatActivity {
             intent.putExtra("nama", namaUser);
             startActivity(intent);
         });
-
-        if (menu == menuJadwal) {
-            menuJadwal.setOnClickListener(v -> {
-                String todayForApi = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                        .format(Calendar.getInstance().getTime());
-                callApiCloudflare(idRt, todayForApi);
-            });
-        }
     }
 
     private void setupLogoutLogic() {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
-                // 1. Hapus Session Lokal (SharedPreferences)
                 SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
                 prefs.edit().clear().apply();
 
-                // 2. Logout dari Firebase Auth
                 FirebaseAuth.getInstance().signOut();
 
-                // 3. Pindah ke Halaman Login & Bersihkan Stack Activity
-                // (Agar user tidak bisa kembali ke dashboard dengan tombol Back)
                 Intent intent = new Intent(DashboardActivity.this, LoginActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 startActivity(intent);
                 finish();
             });
         }
-    }
-
-    public void callApiCloudflare(String id_rt, String tanggal) {
-        String url = BASE_URL + "get_jadwal.php?id_rt=" + id_rt + "&tanggal=" + tanggal;
-        RequestQueue queue = Volley.newRequestQueue(this);
-        JsonObjectRequest req = new JsonObjectRequest(Request.Method.GET, url, null,
-                response -> {
-                    Intent i = new Intent(DashboardActivity.this, JadwalRondaActivity.class);
-                    i.putExtra("json_jadwal", response.toString());
-                    startActivity(i);
-                },
-                error -> {
-                    Toast.makeText(this, "Gagal menghubungi server", Toast.LENGTH_SHORT).show();
-                });
-        queue.add(req);
     }
 
     private void setupContactCard() {
@@ -201,59 +171,49 @@ public class DashboardActivity extends AppCompatActivity {
 
     private void loadPosRondaForUser() {
         if (idRt == null || idRt.isEmpty()) return;
-        StringRequest request = new StringRequest(Request.Method.POST, GET_POS_RONDA_URL,
-                response -> {
-                    try {
-                        JSONObject json = new JSONObject(response);
-                        if (json.optBoolean("success", false)) {
-                            currentPosPhone = json.optString("nomor_telepon", "");
-                            tvContactNumber.setText(currentPosPhone);
-                            tvContactLocation.setText(json.optString("lokasi_pos", ""));
-                        }
-                    } catch (Exception e) { e.printStackTrace(); }
-                },
-                error -> {}
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("id_rt", idRt);
-                return params;
-            }
-        };
-        Volley.newRequestQueue(this).add(request);
+
+        db.collection("data_rt").document(idRt)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        currentPosPhone = documentSnapshot.getString("pos_phone");
+                        String lokasi = documentSnapshot.getString("lokasi");
+                        if (currentPosPhone != null) tvContactNumber.setText(currentPosPhone);
+                        if (lokasi != null) tvContactLocation.setText(lokasi);
+                    } else {
+                         // Default dummy data if not set yet
+                         tvContactLocation.setText("Belum diatur");
+                         tvContactNumber.setText("-");
+                    }
+                })
+                .addOnFailureListener(e -> Log.e("FIRESTORE_RT", e.getMessage()));
     }
 
 
-    // --- FUNGSI LOAD PENGUMUMAN ---
+    // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) ---
     private void loadPengumuman() {
-        // Karena idRt sudah diambil di loadUserData(), langsung pakai saja
         if(idRt == null) return;
 
-        // Pastikan endpoint API ini sesuai dengan file PHP get_pengumuman.php kamu
-        String url = BASE_URL + "get_pengumuman.php?id_rt=" + idRt;
-
-        StringRequest req = new StringRequest(Request.Method.GET, url,
-                response -> {
-                    try {
-                        JSONObject obj = new JSONObject(response);
-                        if (obj.getBoolean("success")) {
-                            JSONArray data = obj.getJSONArray("data");
-                            // Set Adapter
-                            PengumumanAdapter adapter = new PengumumanAdapter(data);
-                            rvPengumuman.setAdapter(adapter);
-                        }
-                    } catch (Exception e) { e.printStackTrace(); }
-                },
-                error -> Log.e("API_PENGUMUMAN", "Error: " + error.toString())
-        );
-        Volley.newRequestQueue(this).add(req);
+        db.collection("pengumuman")
+                .whereEqualTo("id_rt", idRt)
+                .orderBy("tanggal", Query.Direction.DESCENDING)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    List<Map<String, Object>> dataList = new ArrayList<>();
+                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                        dataList.add(doc.getData());
+                    }
+                    PengumumanAdapter adapter = new PengumumanAdapter(dataList);
+                    rvPengumuman.setAdapter(adapter);
+                })
+                .addOnFailureListener(e -> Log.e("FIRESTORE_PENGUMUMAN", e.getMessage()));
     }
 
     // --- INNER CLASS ADAPTER ---
     class PengumumanAdapter extends RecyclerView.Adapter<PengumumanAdapter.Holder> {
-        JSONArray data;
-        public PengumumanAdapter(JSONArray data) { this.data = data; }
+        List<Map<String, Object>> data;
+
+        public PengumumanAdapter(List<Map<String, Object>> data) { this.data = data; }
 
         @Override
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
@@ -264,21 +224,22 @@ public class DashboardActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(Holder holder, int position) {
             try {
-                JSONObject item = data.getJSONObject(position);
-                holder.tvJudul.setText(item.getString("judul"));
-                holder.tvIsi.setText(item.getString("isi"));
+                Map<String, Object> item = data.get(position);
+                holder.tvJudul.setText((String) item.get("judul"));
+                holder.tvIsi.setText((String) item.get("isi"));
 
-                // Pastikan key JSON 'tanggal_fmt' ada di PHP get_pengumuman.php
-                if(item.has("tanggal_fmt")) {
-                    holder.tvTanggal.setText(item.getString("tanggal_fmt"));
-                } else {
-                    holder.tvTanggal.setText(item.getString("tanggal"));
+                // Convert Timestamp to Date String
+                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item.get("tanggal");
+                if (timestamp != null) {
+                    Date date = timestamp.toDate();
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy", Locale.getDefault());
+                    holder.tvTanggal.setText(sdf.format(date));
                 }
             } catch (Exception e) { e.printStackTrace(); }
         }
 
         @Override
-        public int getItemCount() { return data.length(); }
+        public int getItemCount() { return data.size(); }
 
         class Holder extends RecyclerView.ViewHolder {
             TextView tvJudul, tvIsi, tvTanggal;
