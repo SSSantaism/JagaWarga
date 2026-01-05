@@ -65,7 +65,7 @@ public class AbsenRondaActivity extends AppCompatActivity {
         insert_absenID = findViewById(R.id.insert_absenID); // Optional now
         textTanggalAbsen = findViewById(R.id.Tanggal_absen);
 
-        insert_absenID.setHint("Catatan (Opsional)"); // Repurpose input
+        insert_absenID.setHint("Masukan ID"); // Repurpose input
     }
 
     private void setupDate() {

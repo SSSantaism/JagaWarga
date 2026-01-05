@@ -2,10 +2,8 @@ package com.example.jagawarga;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -18,11 +16,7 @@ public class DashboardRtActivity extends AppCompatActivity {
     // Menu utama
     private LinearLayout menuTerimaLaporan;
     private LinearLayout menuListPermintaan;
-
     private LinearLayout menuBuatPengumuman;
-
-    // Tombol generate (sesuai layout XML, ini adalah TextView yang dibungkus CardView/Layout)
-    private TextView btnGenerateJadwal;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,10 +40,9 @@ public class DashboardRtActivity extends AppCompatActivity {
         tvTanggalRt.setText(tanggal);
 
         // ====== 3. Inisialisasi menu ======
-        menuTerimaLaporan   = findViewById(R.id.menuTerimaLaporan);
-        menuListPermintaan  = findViewById(R.id.menuListPermintaan);
-        menuBuatPengumuman  = findViewById(R.id.menuBuatPengumuman);
-        btnGenerateJadwal   = findViewById(R.id.btnGenerateJadwal);
+        menuTerimaLaporan = findViewById(R.id.menuTerimaLaporan);
+        menuListPermintaan = findViewById(R.id.menuListPermintaan);
+        menuBuatPengumuman = findViewById(R.id.menuBuatPengumuman);
 
         // ====== 4. Setup Listener (Navigasi) ======
 
@@ -67,14 +60,5 @@ public class DashboardRtActivity extends AppCompatActivity {
             // Mengarahkan ke ListPermintaan (activity_list_permintaan_register.xml)
             startActivity(new Intent(this, ListPermintaanActivity.class));
         });
-
-        // ====== 5. LOGIC GENERATE JADWAL (REMOVED) ======
-        if (btnGenerateJadwal != null) {
-            btnGenerateJadwal.setOnClickListener(v -> {
-                 Toast.makeText(this, "Fitur generate jadwal sudah otomatis.", Toast.LENGTH_SHORT).show();
-            });
-            // Optional: Hide the button
-            // ((View)btnGenerateJadwal.getParent()).setVisibility(View.GONE);
-        }
     }
 }

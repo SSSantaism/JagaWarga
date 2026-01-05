@@ -13,6 +13,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
+import android.widget.LinearLayout;
+
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
@@ -23,6 +25,7 @@ public class JadwalRondaActivity extends AppCompatActivity {
     TextView[] tvNama = new TextView[10];
     TextView[] tvIdJadwal = new TextView[10];
     TextView[] tvJam = new TextView[10];
+    LinearLayout[] itemJadwal = new LinearLayout[10];
 
     // === UI Navigasi Tanggal ===
     ImageButton btnBackJadwal, btnPrevDate, btnNextDate;
@@ -31,8 +34,8 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
     // === Date Management ===
     Calendar calendar;
-    SimpleDateFormat dateFormatDay;      // Format: "Senin", "Selasa"
-    SimpleDateFormat dateFormatDisplay;  // Format: "Senin, 25 November"
+    SimpleDateFormat dateFormatDay; // Format: "Senin", "Selasa"
+    SimpleDateFormat dateFormatDisplay; // Format: "Senin, 25 November"
 
     private FirebaseFirestore db;
     private String currentRt;
@@ -54,8 +57,8 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
     private void initUI() {
         btnBackJadwal = findViewById(R.id.btnBackJadwal);
-        btnPrevDate   = findViewById(R.id.btnPrevDate);
-        btnNextDate   = findViewById(R.id.btnNextDate);
+        btnPrevDate = findViewById(R.id.btnPrevDate);
+        btnNextDate = findViewById(R.id.btnNextDate);
         btnKembaliJadwal = findViewById(R.id.btnKembaliJadwal);
         textTanggalPilihan = findViewById(R.id.textTanggalPilihan);
 
@@ -91,6 +94,18 @@ public class JadwalRondaActivity extends AppCompatActivity {
         tvJam[7] = findViewById(R.id.textJam8);
         tvJam[8] = findViewById(R.id.textJam9);
         tvJam[9] = findViewById(R.id.textJam10);
+
+        // Item containers for visibility control
+        itemJadwal[0] = findViewById(R.id.itemJadwal1);
+        itemJadwal[1] = findViewById(R.id.itemJadwal2);
+        itemJadwal[2] = findViewById(R.id.itemJadwal3);
+        itemJadwal[3] = findViewById(R.id.itemJadwal4);
+        itemJadwal[4] = findViewById(R.id.itemJadwal5);
+        itemJadwal[5] = findViewById(R.id.itemJadwal6);
+        itemJadwal[6] = findViewById(R.id.itemJadwal7);
+        itemJadwal[7] = findViewById(R.id.itemJadwal8);
+        itemJadwal[8] = findViewById(R.id.itemJadwal9);
+        itemJadwal[9] = findViewById(R.id.itemJadwal10);
     }
 
     private void initTanggal() {
@@ -120,45 +135,67 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
     private void updateTanggalUI() {
         String formatted = dateFormatDisplay.format(calendar.getTime());
-        formatted = formatted.substring(0,1).toUpperCase() + formatted.substring(1);
+        formatted = formatted.substring(0, 1).toUpperCase() + formatted.substring(1);
         textTanggalPilihan.setText(formatted);
     }
 
     private void loadJadwalFromFirestore() {
-        if (currentRt == null) return;
+        if (currentRt == null) {
+            Log.d("JadwalRonda", "currentRt is null");
+            return;
+        }
 
         // Ambil nama hari (Senin, Selasa, dll)
         String hariIni = dateFormatDay.format(calendar.getTime());
+        // Capitalize first letter
+        hariIni = hariIni.substring(0, 1).toUpperCase() + hariIni.substring(1).toLowerCase();
 
-        // Reset UI
+        Log.d("JadwalRonda", "Loading jadwal for RT: " + currentRt + ", Hari: " + hariIni);
+
+        // Reset UI - hide all items first
         for (int i = 0; i < 10; i++) {
+            if (itemJadwal[i] != null) {
+                itemJadwal[i].setVisibility(View.GONE);
+            }
             tvNama[i].setText("-");
             tvIdJadwal[i].setText("ID Jadwal: -");
             tvJam[i].setText("-");
         }
 
+        final String finalHari = hariIni;
         db.collection("users")
                 .whereEqualTo("id_rt", currentRt)
                 .whereEqualTo("jadwal_hari", hariIni)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
+                    Log.d("JadwalRonda", "Query returned " + queryDocumentSnapshots.size() + " documents");
+
                     int index = 0;
                     for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        if (index >= 10) break;
+                        if (index >= 10)
+                            break;
 
-                        // Check if verified (optional based on your flow)
-                        String status = doc.getString("status_warga");
-                        if ("verified".equals(status) || status == null) { // Handle legacy users without status
-                             tvNama[index].setText(doc.getString("nama"));
-                             // ID Jadwal is technically just their UID/Name in this simplified flow
-                             // Or we can display the Day
-                             tvIdJadwal[index].setText("ID: " + hariIni);
-                             // Shift/Waktu can be default 20:00 - 02:00
-                             tvJam[index].setText("20:00 - 02:00");
-                             index++;
+                        String nama = doc.getString("nama");
+                        String jadwalId = doc.getString("jadwal_id");
+                        Log.d("JadwalRonda", "Found user: " + nama + ", jadwal_id: " + jadwalId);
+
+                        // Show item and populate data
+                        if (itemJadwal[index] != null) {
+                            itemJadwal[index].setVisibility(View.VISIBLE);
                         }
+                        tvNama[index].setText(nama != null ? nama : "-");
+                        tvIdJadwal[index].setText("ID: " + (jadwalId != null ? jadwalId : "-"));
+                        tvJam[index].setText("20:00 - 02:00");
+                        index++;
+                    }
+
+                    if (index == 0) {
+                        Log.d("JadwalRonda", "No users found for this day");
                     }
                 })
-                .addOnFailureListener(e -> Toast.makeText(this, "Gagal muat jadwal: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> {
+                    Log.e("JadwalRonda", "Error loading jadwal: " + e.getMessage());
+                    Toast.makeText(this, "Gagal muat jadwal: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 }

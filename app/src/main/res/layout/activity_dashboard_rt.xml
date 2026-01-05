@@ -220,60 +220,7 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- ===== CARD GENERATE JADWAL RONDA ===== -->
 
-        <androidx.cardview.widget.CardView
-            android:id="@+id/cardGenerateJadwal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            app:cardBackgroundColor="@color/blue"
-            app:cardCornerRadius="16dp"
-            app:layout_constraintTop_toBottomOf="@id/cardTodayRt"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="24dp"
-                android:gravity="center_horizontal">
-
-                <TextView
-                    android:id="@+id/tvGenerateTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Generate Jadwal Ronda"
-                    android:textColor="@color/white"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvGenerateSubtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Klik untuk membuat jadwal mingguan"
-                    android:textColor="@color/white"
-                    android:textSize="13sp" />
-
-                <!-- Tombol putih Generate -->
-                <TextView
-                    android:id="@+id/btnGenerateJadwal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/rounded_button_white"
-                    android:gravity="center"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp"
-                    android:text="Generate!"
-                    android:textColor="@color/blue"
-                    android:textAppearance="@style/TextAppearance.AppCompat.Small"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.core.widget.NestedScrollView>

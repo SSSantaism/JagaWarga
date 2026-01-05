@@ -1,40 +1,21 @@
 package com.example.jagawarga;
 
 import android.os.Bundle;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class TukarJadwalActivity extends AppCompatActivity {
 
     private ImageButton btnBack;
-    // UI Changed: Instead of IDs, we ask for "New Day Request" or "Target User"?
-    // Plan: "Create a doc in request_tukar: from_uid, from_name, from_day, id_rt, reason."
-    // Let's repurpose the UI. "Jadwal Saya" -> just show current day (readonly).
-    // "Jadwal Tujuan" -> Dropdown of Days? Or just "Alasan"?
-    // If we want to request a NEW DAY, a spinner is best.
-
-    // However, I need to keep the layout IDs or update XML. I'll reuse IDs for now but change logic.
-    // etIdJadwalSaya -> (Hidden/Unused or Readonly)
-    // etIdJadwalTujuan -> Use this for "Alasan" or "Hari Baru" text?
-    // Let's assume the user wants to move to a specific day.
-
-    private EditText etIdJadwalSaya; // Reused as "Alasan"
-    private Spinner spinnerHari;     // Need to add this to layout or reuse existing EditText?
-    // Let's reuse etIdJadwalTujuan as "Hari yang diinginkan (e.g. Senin)"
+    private EditText etIdJadwalSaya;
     private EditText etIdJadwalTujuan;
-
     private Button btnTukarJadwal;
     private FirebaseFirestore db;
 
@@ -48,9 +29,9 @@ public class TukarJadwalActivity extends AppCompatActivity {
         initViews();
         setupListeners();
 
-        // Cosmetic: Change hints
-        etIdJadwalSaya.setHint("Alasan Tukar");
-        etIdJadwalTujuan.setHint("Hari yang diinginkan (Senin - Minggu)");
+        // Set proper hints
+        etIdJadwalSaya.setHint("Masukkan ID Jadwal Anda (contoh: JDW-01-ABC123)");
+        etIdJadwalTujuan.setHint("Masukkan ID Jadwal Target Tukar");
     }
 
     private void initViews() {
@@ -62,50 +43,100 @@ public class TukarJadwalActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnBack.setOnClickListener(v -> onBackPressed());
-        btnTukarJadwal.setOnClickListener(v -> handleRequestTukar());
+        btnTukarJadwal.setOnClickListener(v -> handleSwapJadwal());
     }
 
-    private void handleRequestTukar() {
-        String alasan = etIdJadwalSaya.getText().toString().trim();
-        String targetHari = etIdJadwalTujuan.getText().toString().trim();
+    private void handleSwapJadwal() {
+        String myJadwalId = etIdJadwalSaya.getText().toString().trim().toUpperCase();
+        String targetJadwalId = etIdJadwalTujuan.getText().toString().trim().toUpperCase();
 
-        if (targetHari.isEmpty()) {
-            Toast.makeText(this, "Hari tujuan wajib diisi!", Toast.LENGTH_SHORT).show();
+        if (myJadwalId.isEmpty() || targetJadwalId.isEmpty()) {
+            Toast.makeText(this, "Kedua ID Jadwal wajib diisi!", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Validate Day
-        if (!isValidDay(targetHari)) {
-            Toast.makeText(this, "Hari tidak valid. Gunakan Senin, Selasa, dst.", Toast.LENGTH_SHORT).show();
+        if (myJadwalId.equals(targetJadwalId)) {
+            Toast.makeText(this, "Tidak bisa tukar dengan diri sendiri!", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        String idWarga = PrefUtils.getIdWarga(this);
-        String idRt = PrefUtils.getIdRt(this);
-        String nama = getSharedPreferences("user_data", MODE_PRIVATE).getString("nama", "Warga");
+        Toast.makeText(this, "Memproses tukar jadwal...", Toast.LENGTH_SHORT).show();
+        btnTukarJadwal.setEnabled(false);
 
-        Map<String, Object> req = new HashMap<>();
-        req.put("id_warga", idWarga);
-        req.put("nama", nama);
-        req.put("id_rt", idRt);
-        req.put("hari_tujuan", targetHari); // e.g., "Senin"
-        req.put("alasan", alasan);
-        req.put("status", "pending");
-        req.put("timestamp", Timestamp.now());
+        // Step 1: Find user with MY jadwal_id
+        db.collection("users")
+                .whereEqualTo("jadwal_id", myJadwalId)
+                .get()
+                .addOnSuccessListener(myQuerySnapshot -> {
+                    if (myQuerySnapshot.isEmpty()) {
+                        Toast.makeText(this, "ID Jadwal Anda tidak ditemukan!", Toast.LENGTH_SHORT).show();
+                        btnTukarJadwal.setEnabled(true);
+                        return;
+                    }
 
-        db.collection("request_tukar").add(req)
-                .addOnSuccessListener(ref -> {
-                    Toast.makeText(this, "Permintaan tukar jadwal dikirim!", Toast.LENGTH_LONG).show();
-                    finish();
+                    DocumentSnapshot myDoc = myQuerySnapshot.getDocuments().get(0);
+                    String myUserId = myDoc.getId();
+                    String myHari = myDoc.getString("jadwal_hari");
+
+                    // Step 2: Find user with TARGET jadwal_id
+                    db.collection("users")
+                            .whereEqualTo("jadwal_id", targetJadwalId)
+                            .get()
+                            .addOnSuccessListener(targetQuerySnapshot -> {
+                                if (targetQuerySnapshot.isEmpty()) {
+                                    Toast.makeText(this, "ID Jadwal Target tidak ditemukan!", Toast.LENGTH_SHORT)
+                                            .show();
+                                    btnTukarJadwal.setEnabled(true);
+                                    return;
+                                }
+
+                                DocumentSnapshot targetDoc = targetQuerySnapshot.getDocuments().get(0);
+                                String targetUserId = targetDoc.getId();
+                                String targetHari = targetDoc.getString("jadwal_hari");
+
+                                // Step 3: Swap jadwal_hari between the two users
+                                performSwap(myUserId, myHari, targetUserId, targetHari);
+                            })
+                            .addOnFailureListener(e -> {
+                                Toast.makeText(this, "Error mencari jadwal target: " + e.getMessage(),
+                                        Toast.LENGTH_SHORT).show();
+                                btnTukarJadwal.setEnabled(true);
+                            });
                 })
-                .addOnFailureListener(e -> Toast.makeText(this, "Gagal: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Error mencari jadwal Anda: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    btnTukarJadwal.setEnabled(true);
+                });
     }
 
-    private boolean isValidDay(String day) {
-        String[] days = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
-        for (String d : days) {
-            if (d.equalsIgnoreCase(day)) return true;
-        }
-        return false;
+    private void performSwap(String myUserId, String myHari, String targetUserId, String targetHari) {
+        // Update my jadwal_hari to target's day
+        db.collection("users").document(myUserId)
+                .update("jadwal_hari", targetHari)
+                .addOnSuccessListener(v1 -> {
+                    // Update target's jadwal_hari to my day
+                    db.collection("users").document(targetUserId)
+                            .update("jadwal_hari", myHari)
+                            .addOnSuccessListener(v2 -> {
+                                Toast.makeText(this,
+                                        "Tukar jadwal berhasil!\nAnda: " + myHari + " → " + targetHari +
+                                                "\nTarget: " + targetHari + " → " + myHari,
+                                        Toast.LENGTH_LONG).show();
+                                btnTukarJadwal.setEnabled(true);
+                                finish();
+                            })
+                            .addOnFailureListener(e -> {
+                                // Rollback - restore my jadwal_hari
+                                db.collection("users").document(myUserId)
+                                        .update("jadwal_hari", myHari);
+                                Toast.makeText(this, "Gagal update jadwal target. Tukar dibatalkan.",
+                                        Toast.LENGTH_SHORT).show();
+                                btnTukarJadwal.setEnabled(true);
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Gagal update jadwal Anda: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    btnTukarJadwal.setEnabled(true);
+                });
     }
 }

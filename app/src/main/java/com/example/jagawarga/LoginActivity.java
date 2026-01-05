@@ -30,6 +30,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -101,16 +102,16 @@ public class LoginActivity extends AppCompatActivity {
 
     private void setupSpinnerRt() {
         // Data dummy RT, sesuaikan dengan kebutuhan
-        String[] rtOptions = {"01", "02", "03", "04"};
+        String[] rtOptions = { "01", "02", "03", "04" };
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, rtOptions);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         inputRtReg.setAdapter(adapter);
     }
 
-
     private void setupTabs() {
         btnMasukTab.setOnClickListener(v -> {
-            if (layoutLogin.getVisibility() == View.VISIBLE) return;
+            if (layoutLogin.getVisibility() == View.VISIBLE)
+                return;
             TransitionManager.beginDelayedTransition(mainContainer);
             layoutRegister.setVisibility(View.GONE);
             layoutLogin.setVisibility(View.VISIBLE);
@@ -118,7 +119,8 @@ public class LoginActivity extends AppCompatActivity {
         });
 
         btnDaftarTab.setOnClickListener(v -> {
-            if (layoutRegister.getVisibility() == View.VISIBLE) return;
+            if (layoutRegister.getVisibility() == View.VISIBLE)
+                return;
             TransitionManager.beginDelayedTransition(mainContainer);
             layoutLogin.setVisibility(View.GONE);
             layoutRegister.setVisibility(View.VISIBLE);
@@ -168,7 +170,8 @@ public class LoginActivity extends AppCompatActivity {
                             checkUserRole(mAuth.getCurrentUser().getUid());
                         } else {
                             showLoading(false);
-                            String error = task.getException() != null ? task.getException().getMessage() : "Login Gagal";
+                            String error = task.getException() != null ? task.getException().getMessage()
+                                    : "Login Gagal";
                             Toast.makeText(this, "Gagal Masuk: " + error, Toast.LENGTH_LONG).show();
                         }
                     });
@@ -209,7 +212,8 @@ public class LoginActivity extends AppCompatActivity {
                             saveUserDataToFirestore(uid, formattedPhone, nama, rt);
                         } else {
                             showLoading(false);
-                            String error = task.getException() != null ? task.getException().getMessage() : "Register Gagal";
+                            String error = task.getException() != null ? task.getException().getMessage()
+                                    : "Register Gagal";
                             Toast.makeText(this, "Gagal Daftar: " + error, Toast.LENGTH_LONG).show();
                         }
                     });
@@ -219,7 +223,8 @@ public class LoginActivity extends AppCompatActivity {
     // --- HELPER METHODS ---
 
     /**
-     * Mengubah input user (misal: 0812345) menjadi email (misal: +62812345@jagawarga.app)
+     * Mengubah input user (misal: 0812345) menjadi email (misal:
+     * +62812345@jagawarga.app)
      * Ini trik agar bisa pakai Password tanpa OTP.
      */
     private String createFakeEmail(String rawPhone) {
@@ -240,56 +245,117 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     /**
-     * Simpan data detail (Nama, RT, NoHP asli) ke Firestore setelah register Auth berhasil
+     * Callback interface for balanced day assignment
+     */
+    private interface OnBalancedDayCallback {
+        void onResult(String day);
+    }
+
+    /**
+     * Get day with least users for a specific RT (balanced assignment)
+     */
+    private void getBalancedDayForRt(String rt, OnBalancedDayCallback callback) {
+        String[] days = { "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu" };
+        int[] counts = new int[7];
+        AtomicInteger completedQueries = new AtomicInteger(0);
+
+        for (int i = 0; i < days.length; i++) {
+            final int index = i;
+            db.collection("users")
+                    .whereEqualTo("id_rt", rt)
+                    .whereEqualTo("jadwal_hari", days[index])
+                    .get()
+                    .addOnSuccessListener(snap -> {
+                        counts[index] = snap.size();
+                        if (completedQueries.incrementAndGet() == 7) {
+                            // Find day with minimum count
+                            int minIndex = 0;
+                            for (int j = 1; j < 7; j++) {
+                                if (counts[j] < counts[minIndex])
+                                    minIndex = j;
+                            }
+                            callback.onResult(days[minIndex]);
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        // Fallback to random if query fails
+                        if (completedQueries.incrementAndGet() == 7) {
+                            callback.onResult(days[(int) (Math.random() * days.length)]);
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Generate unique jadwal ID in format: JDW-{RT}-{6 random alphanumeric chars}
+     * Example: JDW-01-A3F2K9
+     */
+    private String generateJadwalId(String rt) {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder randomPart = new StringBuilder();
+        for (int i = 0; i < 6; i++) {
+            int idx = (int) (Math.random() * chars.length());
+            randomPart.append(chars.charAt(idx));
+        }
+        return "JDW-" + rt + "-" + randomPart.toString();
+    }
+
+    /**
+     * Simpan data detail (Nama, RT, NoHP asli) ke Firestore setelah register Auth
+     * berhasil
+     * Menggunakan balanced assignment untuk jadwal hari
      */
     private void saveUserDataToFirestore(String uid, String phone, String nama, String rt) {
-        // Pilih jadwal hari secara acak
-        String[] days = {"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"};
-        String randomDay = days[(int) (Math.random() * days.length)];
+        // Get balanced day (day with least users in this RT)
+        getBalancedDayForRt(rt, balancedDay -> {
+            // Generate unique jadwal ID
+            String jadwalId = generateJadwalId(rt);
 
-        Map<String, Object> user = new HashMap<>();
-        user.put("nama", nama);
-        user.put("telepon", phone);
-        user.put("id_rt", rt);
-        user.put("role", "Warga");
-        user.put("jadwal_hari", randomDay);
-        user.put("status_warga", "pending");
-        user.put("createdAt", com.google.firebase.Timestamp.now());
+            Map<String, Object> user = new HashMap<>();
+            user.put("nama", nama);
+            user.put("telepon", phone);
+            user.put("id_rt", rt);
+            user.put("role", "Warga");
+            user.put("jadwal_hari", balancedDay);
+            user.put("jadwal_id", jadwalId);
+            user.put("status_warga", "pending");
+            user.put("createdAt", com.google.firebase.Timestamp.now());
 
-        db.collection("users").document(uid)
-                .set(user)
-                .addOnSuccessListener(aVoid -> {
-                    showLoading(false);
+            db.collection("users").document(uid)
+                    .set(user)
+                    .addOnSuccessListener(aVoid -> {
+                        showLoading(false);
 
-                    // === PERUBAHAN DI SINI ===
+                        // === PERUBAHAN DI SINI ===
 
-                    // 1. Tampilkan pesan sukses
-                    Toast.makeText(this, "Pendaftaran Berhasil! Silakan Login.", Toast.LENGTH_LONG).show();
+                        // 1. Tampilkan pesan sukses
+                        Toast.makeText(this, "Pendaftaran Berhasil! Silakan Login.", Toast.LENGTH_LONG).show();
 
-                    // 2. Logout dari sesi register (karena createUser otomatis login)
-                    mAuth.signOut();
+                        // 2. Logout dari sesi register (karena createUser otomatis login)
+                        mAuth.signOut();
 
-                    // 3. Pindah UI ke Tab Masuk secara otomatis
-                    btnMasukTab.performClick();
+                        // 3. Pindah UI ke Tab Masuk secara otomatis
+                        btnMasukTab.performClick();
 
-                    // 4. (Opsional) Bantu user mengisi No HP di form login agar tidak ketik ulang
-                    // Kembalikan format +62 ke 0 agar natural
-                    String displayPhone = phone.startsWith("+62") ? "0" + phone.substring(3) : phone;
-                    inputPhoneLogin.setText(displayPhone);
-                    inputPasswordLogin.setText(""); // Kosongkan password biar user ketik sendiri
-                    inputPasswordLogin.requestFocus(); // Arahkan kursor ke password
+                        // 4. (Opsional) Bantu user mengisi No HP di form login agar tidak ketik ulang
+                        // Kembalikan format +62 ke 0 agar natural
+                        String displayPhone = phone.startsWith("+62") ? "0" + phone.substring(3) : phone;
+                        inputPhoneLogin.setText(displayPhone);
+                        inputPasswordLogin.setText(""); // Kosongkan password biar user ketik sendiri
+                        inputPasswordLogin.requestFocus(); // Arahkan kursor ke password
 
-                    // 5. Bersihkan form register
-                    inputNamaReg.setText("");
-                    inputPhoneReg.setText("");
-                    inputPassReg.setText("");
+                        // 5. Bersihkan form register
+                        inputNamaReg.setText("");
+                        inputPhoneReg.setText("");
+                        inputPassReg.setText("");
 
-                    // === SELESAI PERUBAHAN ===
-                })
-                .addOnFailureListener(e -> {
-                    showLoading(false);
-                    Toast.makeText(this, "Gagal simpan data profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                });
+                        // === SELESAI PERUBAHAN ===
+                    })
+                    .addOnFailureListener(e -> {
+                        showLoading(false);
+                        Toast.makeText(this, "Gagal simpan data profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    });
+        }); // End of getBalancedDayForRt callback
     }
 
     /**
@@ -305,16 +371,43 @@ public class LoginActivity extends AppCompatActivity {
                             String role = document.getString("role");
                             String nama = document.getString("nama");
                             String idRt = document.getString("id_rt");
+                            String jadwalHari = document.getString("jadwal_hari");
+                            String jadwalId = document.getString("jadwal_id");
 
-                            // Simpan ke SharedPreferences
-                            saveSession(uid, role, nama, idRt);
+                            // Cek apakah user lama tanpa jadwal_hari atau jadwal_id
+                            if (jadwalHari == null || jadwalHari.isEmpty() || jadwalId == null || jadwalId.isEmpty()) {
+                                // Auto-assign jadwal untuk user lama
+                                getBalancedDayForRt(idRt, day -> {
+                                    Map<String, Object> updates = new HashMap<>();
+                                    if (jadwalHari == null || jadwalHari.isEmpty()) {
+                                        updates.put("jadwal_hari", day);
+                                    }
+                                    if (jadwalId == null || jadwalId.isEmpty()) {
+                                        updates.put("jadwal_id", generateJadwalId(idRt));
+                                    }
 
-                            // Pindah ke Dashboard
-                            redirectDashboard(role, nama);
+                                    db.collection("users").document(uid)
+                                            .update(updates)
+                                            .addOnSuccessListener(v -> {
+                                                saveSession(uid, role, nama, idRt);
+                                                redirectDashboard(role, nama);
+                                            })
+                                            .addOnFailureListener(e -> {
+                                                // Even if update fails, continue to dashboard
+                                                saveSession(uid, role, nama, idRt);
+                                                redirectDashboard(role, nama);
+                                            });
+                                });
+                            } else {
+                                // User sudah punya jadwal, lanjut normal
+                                saveSession(uid, role, nama, idRt);
+                                redirectDashboard(role, nama);
+                            }
                         } else {
                             showLoading(false);
                             // Kasus langka: Auth ada tapi data Firestore hilang
-                            Toast.makeText(this, "Data profil tidak ditemukan. Hubungi Admin.", Toast.LENGTH_LONG).show();
+                            Toast.makeText(this, "Data profil tidak ditemukan. Hubungi Admin.", Toast.LENGTH_LONG)
+                                    .show();
                         }
                     } else {
                         showLoading(false);
