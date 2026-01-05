@@ -101,7 +101,7 @@
         <LinearLayout
             android:id="@+id/layoutLogin"
             android:layout_width="0dp"
-            android:layout_height="345dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="68dp"
             android:orientation="vertical"
             android:visibility="visible"
