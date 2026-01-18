@@ -79,24 +79,24 @@ public class DashboardActivity extends AppCompatActivity {
 
     private void loadUserData() {
         SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        idWarga   = prefs.getString("id", null);
-        idRt      = prefs.getString("id_rt", null);
-        namaUser  = prefs.getString("nama", "Pengguna");
+        idWarga = prefs.getString("id", null);
+        idRt = prefs.getString("id_rt", null);
+        namaUser = prefs.getString("nama", "Pengguna");
     }
 
     private void initViews() {
-        menuAbsen   = findViewById(R.id.menuAbsen);
-        menuTukar   = findViewById(R.id.menuTukar);
-        menuLapor   = findViewById(R.id.menuLapor);
-        menuJadwal  = findViewById(R.id.menuJadwal);
+        menuAbsen = findViewById(R.id.menuAbsen);
+        menuTukar = findViewById(R.id.menuTukar);
+        menuLapor = findViewById(R.id.menuLapor);
+        menuJadwal = findViewById(R.id.menuJadwal);
 
-        tvGreeting       = findViewById(R.id.tvGreeting);
-        tanggalCurrent   = findViewById(R.id.tanggal_current);
+        tvGreeting = findViewById(R.id.tvGreeting);
+        tanggalCurrent = findViewById(R.id.tanggal_current);
         profileContainer = findViewById(R.id.profileContainer);
 
-        tvContactNumber   = findViewById(R.id.tvContactNumberText);
+        tvContactNumber = findViewById(R.id.tvContactNumberText);
         tvContactLocation = findViewById(R.id.tvContactLocation);
-        imgWhatsapp   = findViewById(R.id.imgWhatsapp);
+        imgWhatsapp = findViewById(R.id.imgWhatsapp);
 
         rvPengumuman = findViewById(R.id.rvPengumuman);
         rvPengumuman.setLayoutManager(new LinearLayoutManager(this));
@@ -113,7 +113,8 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void setupMenuNavigation(LinearLayout menu, Class<?> targetActivity) {
-        if (menu == null) return;
+        if (menu == null)
+            return;
         menu.setOnClickListener(v -> {
             Intent intent = new Intent(DashboardActivity.this, targetActivity);
             intent.putExtra("id_rt", idRt);
@@ -170,7 +171,8 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void loadPosRondaForUser() {
-        if (idRt == null || idRt.isEmpty()) return;
+        if (idRt == null || idRt.isEmpty())
+            return;
 
         db.collection("data_rt").document(idRt)
                 .get()
@@ -178,27 +180,26 @@ public class DashboardActivity extends AppCompatActivity {
                     if (documentSnapshot.exists()) {
                         currentPosPhone = documentSnapshot.getString("pos_phone");
                         String lokasi = documentSnapshot.getString("lokasi");
-                        if (currentPosPhone != null) tvContactNumber.setText(currentPosPhone);
-                        if (lokasi != null) tvContactLocation.setText(lokasi);
+                        if (currentPosPhone != null)
+                            tvContactNumber.setText(currentPosPhone);
+                        if (lokasi != null)
+                            tvContactLocation.setText(lokasi);
                     } else {
-                         // Default dummy data if not set yet
-                         tvContactLocation.setText("Belum diatur");
-                         tvContactNumber.setText("-");
+                        // Default dummy data if not set yet
+                        tvContactLocation.setText("Belum diatur");
+                        tvContactNumber.setText("-");
                     }
                 })
                 .addOnFailureListener(e -> Log.e("FIRESTORE_RT", e.getMessage()));
     }
 
-
-    // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) ---
+    // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) - UNIVERSAL UNTUK SEMUA USER ---
     private void loadPengumuman() {
-        if(idRt == null) return;
-
         db.collection("pengumuman")
-                .whereEqualTo("id_rt", idRt)
                 .orderBy("tanggal", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
+                    Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
                     List<Map<String, Object>> dataList = new ArrayList<>();
                     for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
                         dataList.add(doc.getData());
@@ -206,14 +207,19 @@ public class DashboardActivity extends AppCompatActivity {
                     PengumumanAdapter adapter = new PengumumanAdapter(dataList);
                     rvPengumuman.setAdapter(adapter);
                 })
-                .addOnFailureListener(e -> Log.e("FIRESTORE_PENGUMUMAN", e.getMessage()));
+                .addOnFailureListener(e -> {
+                    Log.e("PENGUMUMAN", "Error loading pengumuman: " + e.getMessage());
+                    e.printStackTrace();
+                });
     }
 
     // --- INNER CLASS ADAPTER ---
     class PengumumanAdapter extends RecyclerView.Adapter<PengumumanAdapter.Holder> {
         List<Map<String, Object>> data;
 
-        public PengumumanAdapter(List<Map<String, Object>> data) { this.data = data; }
+        public PengumumanAdapter(List<Map<String, Object>> data) {
+            this.data = data;
+        }
 
         @Override
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
@@ -225,24 +231,40 @@ public class DashboardActivity extends AppCompatActivity {
         public void onBindViewHolder(Holder holder, int position) {
             try {
                 Map<String, Object> item = data.get(position);
-                holder.tvJudul.setText((String) item.get("judul"));
-                holder.tvIsi.setText((String) item.get("isi"));
 
-                // Convert Timestamp to Date String
+                // Format judul: "RT [id_rt] - [judul]"
+                String idRtPengumuman = (String) item.get("id_rt");
+                String judul = (String) item.get("judul");
+                String formattedJudul = "RT " + (idRtPengumuman != null ? idRtPengumuman : "-") + " - "
+                        + (judul != null ? judul : "-");
+                holder.tvJudul.setText(formattedJudul);
+
+                // Isi pengumuman
+                String isi = (String) item.get("isi");
+                holder.tvIsi.setText(isi != null ? isi : "-");
+
+                // Format tanggal: "DD MMM" (contoh: "12 Des")
                 com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item.get("tanggal");
                 if (timestamp != null) {
                     Date date = timestamp.toDate();
-                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy", Locale.getDefault());
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
                     holder.tvTanggal.setText(sdf.format(date));
+                } else {
+                    holder.tvTanggal.setText("-");
                 }
-            } catch (Exception e) { e.printStackTrace(); }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         @Override
-        public int getItemCount() { return data.size(); }
+        public int getItemCount() {
+            return data.size();
+        }
 
         class Holder extends RecyclerView.ViewHolder {
             TextView tvJudul, tvIsi, tvTanggal;
+
             public Holder(View v) {
                 super(v);
                 tvJudul = v.findViewById(R.id.tvJudulPengumuman);

@@ -29,8 +29,17 @@ public class TukarJadwalActivity extends AppCompatActivity {
         initViews();
         setupListeners();
 
-        // Set proper hints
-        etIdJadwalSaya.setHint("Masukkan ID Jadwal Anda (contoh: JDW-01-ABC123)");
+        // Auto-fill ID Jadwal Saya dari session
+        String myJadwalId = PrefUtils.getJadwalId(this);
+        if (myJadwalId != null) {
+            etIdJadwalSaya.setText(myJadwalId);
+            etIdJadwalSaya.setEnabled(false); // Read-only
+            etIdJadwalSaya.setFocusable(false);
+        } else {
+            etIdJadwalSaya.setHint("ID Jadwal tidak ditemukan");
+            etIdJadwalSaya.setEnabled(false);
+        }
+
         etIdJadwalTujuan.setHint("Masukkan ID Jadwal Target Tukar");
     }
 

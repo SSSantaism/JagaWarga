@@ -64,48 +64,16 @@ public class JadwalRondaActivity extends AppCompatActivity {
 
         tvNama[0] = findViewById(R.id.textNama1);
         tvNama[1] = findViewById(R.id.textNama2);
-        tvNama[2] = findViewById(R.id.textNama3);
-        tvNama[3] = findViewById(R.id.textNama4);
-        tvNama[4] = findViewById(R.id.textNama5);
-        tvNama[5] = findViewById(R.id.textNama6);
-        tvNama[6] = findViewById(R.id.textNama7);
-        tvNama[7] = findViewById(R.id.textNama8);
-        tvNama[8] = findViewById(R.id.textNama9);
-        tvNama[9] = findViewById(R.id.textNama10);
 
         tvIdJadwal[0] = findViewById(R.id.textIdJadwal1);
         tvIdJadwal[1] = findViewById(R.id.textIdJadwal2);
-        tvIdJadwal[2] = findViewById(R.id.textIdJadwal3);
-        tvIdJadwal[3] = findViewById(R.id.textIdJadwal4);
-        tvIdJadwal[4] = findViewById(R.id.textIdJadwal5);
-        tvIdJadwal[5] = findViewById(R.id.textIdJadwal6);
-        tvIdJadwal[6] = findViewById(R.id.textIdJadwal7);
-        tvIdJadwal[7] = findViewById(R.id.textIdJadwal8);
-        tvIdJadwal[8] = findViewById(R.id.textIdJadwal9);
-        tvIdJadwal[9] = findViewById(R.id.textIdJadwal10);
 
         tvJam[0] = findViewById(R.id.textJam1);
         tvJam[1] = findViewById(R.id.textJam2);
-        tvJam[2] = findViewById(R.id.textJam3);
-        tvJam[3] = findViewById(R.id.textJam4);
-        tvJam[4] = findViewById(R.id.textJam5);
-        tvJam[5] = findViewById(R.id.textJam6);
-        tvJam[6] = findViewById(R.id.textJam7);
-        tvJam[7] = findViewById(R.id.textJam8);
-        tvJam[8] = findViewById(R.id.textJam9);
-        tvJam[9] = findViewById(R.id.textJam10);
 
         // Item containers for visibility control
         itemJadwal[0] = findViewById(R.id.itemJadwal1);
         itemJadwal[1] = findViewById(R.id.itemJadwal2);
-        itemJadwal[2] = findViewById(R.id.itemJadwal3);
-        itemJadwal[3] = findViewById(R.id.itemJadwal4);
-        itemJadwal[4] = findViewById(R.id.itemJadwal5);
-        itemJadwal[5] = findViewById(R.id.itemJadwal6);
-        itemJadwal[6] = findViewById(R.id.itemJadwal7);
-        itemJadwal[7] = findViewById(R.id.itemJadwal8);
-        itemJadwal[8] = findViewById(R.id.itemJadwal9);
-        itemJadwal[9] = findViewById(R.id.itemJadwal10);
     }
 
     private void initTanggal() {
@@ -145,6 +113,9 @@ public class JadwalRondaActivity extends AppCompatActivity {
             return;
         }
 
+        // Get current logged-in user ID for comparison
+        String currentUserId = PrefUtils.getIdWarga(this);
+
         // Ambil nama hari (Senin, Selasa, dll)
         String hariIni = dateFormatDay.format(calendar.getTime());
         // Capitalize first letter
@@ -157,12 +128,19 @@ public class JadwalRondaActivity extends AppCompatActivity {
             if (itemJadwal[i] != null) {
                 itemJadwal[i].setVisibility(View.GONE);
             }
-            tvNama[i].setText("-");
-            tvIdJadwal[i].setText("ID Jadwal: -");
-            tvJam[i].setText("-");
+            if (tvNama[i] != null) {
+                tvNama[i].setText("-");
+            }
+            if (tvIdJadwal[i] != null) {
+                tvIdJadwal[i].setText("ID Jadwal: -");
+            }
+            if (tvJam[i] != null) {
+                tvJam[i].setText("-");
+            }
         }
 
         final String finalHari = hariIni;
+        final String finalUserId = currentUserId;
         db.collection("users")
                 .whereEqualTo("id_rt", currentRt)
                 .whereEqualTo("jadwal_hari", hariIni)
@@ -175,6 +153,7 @@ public class JadwalRondaActivity extends AppCompatActivity {
                         if (index >= 10)
                             break;
 
+                        String docId = doc.getId();
                         String nama = doc.getString("nama");
                         String jadwalId = doc.getString("jadwal_id");
                         Log.d("JadwalRonda", "Found user: " + nama + ", jadwal_id: " + jadwalId);
@@ -182,10 +161,25 @@ public class JadwalRondaActivity extends AppCompatActivity {
                         // Show item and populate data
                         if (itemJadwal[index] != null) {
                             itemJadwal[index].setVisibility(View.VISIBLE);
+
+                            // Set background based on whether this is the logged-in user's schedule
+                            if (finalUserId != null && docId.equals(finalUserId)) {
+                                // Green highlight for current user's schedule
+                                itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_selected);
+                            } else {
+                                // Gray background for other users' schedules
+                                itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_normal);
+                            }
                         }
-                        tvNama[index].setText(nama != null ? nama : "-");
-                        tvIdJadwal[index].setText("ID: " + (jadwalId != null ? jadwalId : "-"));
-                        tvJam[index].setText("20:00 - 02:00");
+                        if (tvNama[index] != null) {
+                            tvNama[index].setText(nama != null ? nama : "-");
+                        }
+                        if (tvIdJadwal[index] != null) {
+                            tvIdJadwal[index].setText("ID: " + (jadwalId != null ? jadwalId : "-"));
+                        }
+                        if (tvJam[index] != null) {
+                            tvJam[index].setText("20:00 - 02:00");
+                        }
                         index++;
                     }
 

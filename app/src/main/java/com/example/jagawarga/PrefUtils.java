@@ -35,11 +35,26 @@ public class PrefUtils {
         }
 
         if (idWarga == null) {
-            Toast.makeText(context, "ID Warga tidak ditemukan (Sesi Habis). Silakan Logout & Login ulang.", Toast.LENGTH_LONG).show();
+            Toast.makeText(context, "ID Warga tidak ditemukan (Sesi Habis). Silakan Logout & Login ulang.",
+                    Toast.LENGTH_LONG).show();
         } else {
             Log.d("DEBUG_WARGA", "ID Warga ditemukan: " + idWarga);
         }
 
         return idWarga;
+    }
+
+    // Ambil Jadwal ID
+    public static String getJadwalId(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        String jadwalId = prefs.getString("jadwal_id", null);
+
+        if (jadwalId == null) {
+            Log.d("DEBUG_JADWAL", "Jadwal ID tidak ditemukan di session");
+        } else {
+            Log.d("DEBUG_JADWAL", "Jadwal ID ditemukan: " + jadwalId);
+        }
+
+        return jadwalId;
     }
 }

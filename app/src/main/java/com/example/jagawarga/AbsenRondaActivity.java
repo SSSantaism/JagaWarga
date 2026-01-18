@@ -25,10 +25,12 @@ public class AbsenRondaActivity extends AppCompatActivity {
 
     private ImageButton btnBackAbsen;
     private Button btnKirimAbsen;
-    // EditText insert_absenID; // No longer needed if we check day automatically, but let's keep it as "Code" or remove logic?
+    // EditText insert_absenID; // No longer needed if we check day automatically,
+    // but let's keep it as "Code" or remove logic?
     // Plan said: "Check: Is today == User's jadwal_hari?"
     // If we rely on automatic check, we don't need ID Jadwal input.
-    // However, the UI might still have it. I should probably ignore it or use it as "Notes".
+    // However, the UI might still have it. I should probably ignore it or use it as
+    // "Notes".
     // Let's hide or ignore the ID input for now and focus on day verification.
     private EditText insert_absenID;
 
@@ -62,10 +64,19 @@ public class AbsenRondaActivity extends AppCompatActivity {
     private void initViews() {
         btnBackAbsen = findViewById(R.id.btnBackAbsen);
         btnKirimAbsen = findViewById(R.id.btnUploadLaporan);
-        insert_absenID = findViewById(R.id.insert_absenID); // Optional now
+        insert_absenID = findViewById(R.id.insert_absenID);
         textTanggalAbsen = findViewById(R.id.Tanggal_absen);
 
-        insert_absenID.setHint("Masukan ID"); // Repurpose input
+        // Auto-fill ID Jadwal dari session
+        String jadwalId = PrefUtils.getJadwalId(this);
+        if (jadwalId != null) {
+            insert_absenID.setText(jadwalId);
+            insert_absenID.setEnabled(false); // Read-only
+            insert_absenID.setFocusable(false);
+        } else {
+            insert_absenID.setHint("ID Jadwal tidak ditemukan");
+            insert_absenID.setEnabled(false);
+        }
     }
 
     private void setupDate() {
@@ -94,7 +105,9 @@ public class AbsenRondaActivity extends AppCompatActivity {
                         submitAbsenToFirestore(idWarga, idRt, nama, loading);
                     } else {
                         loading.dismiss();
-                        Toast.makeText(this, "Maaf, hari ini (" + hariIni + ") bukan jadwal ronda Anda (" + jadwalHari + ").", Toast.LENGTH_LONG).show();
+                        Toast.makeText(this,
+                                "Maaf, hari ini (" + hariIni + ") bukan jadwal ronda Anda (" + jadwalHari + ").",
+                                Toast.LENGTH_LONG).show();
                     }
                 })
                 .addOnFailureListener(e -> {

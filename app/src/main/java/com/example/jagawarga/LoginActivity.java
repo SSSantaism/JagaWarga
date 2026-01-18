@@ -389,18 +389,21 @@ public class LoginActivity extends AppCompatActivity {
                                     db.collection("users").document(uid)
                                             .update(updates)
                                             .addOnSuccessListener(v -> {
-                                                saveSession(uid, role, nama, idRt);
+                                                String newJadwalId = (String) updates.get("jadwal_id");
+                                                if (newJadwalId == null)
+                                                    newJadwalId = jadwalId;
+                                                saveSession(uid, role, nama, idRt, newJadwalId);
                                                 redirectDashboard(role, nama);
                                             })
                                             .addOnFailureListener(e -> {
                                                 // Even if update fails, continue to dashboard
-                                                saveSession(uid, role, nama, idRt);
+                                                saveSession(uid, role, nama, idRt, jadwalId);
                                                 redirectDashboard(role, nama);
                                             });
                                 });
                             } else {
                                 // User sudah punya jadwal, lanjut normal
-                                saveSession(uid, role, nama, idRt);
+                                saveSession(uid, role, nama, idRt, jadwalId);
                                 redirectDashboard(role, nama);
                             }
                         } else {
@@ -416,13 +419,14 @@ public class LoginActivity extends AppCompatActivity {
                 });
     }
 
-    private void saveSession(String id, String role, String nama, String idRt) {
+    private void saveSession(String id, String role, String nama, String idRt, String jadwalId) {
         SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
         prefs.edit()
                 .putString("id", id)
                 .putString("id_rt", idRt)
                 .putString("nama", nama)
                 .putString("role", role)
+                .putString("jadwal_id", jadwalId)
                 .apply();
     }
 
