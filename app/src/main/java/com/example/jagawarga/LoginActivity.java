@@ -32,6 +32,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import android.text.InputType;
+import android.widget.ImageView;
+
 public class LoginActivity extends AppCompatActivity {
 
     // UI Components
@@ -47,6 +50,11 @@ public class LoginActivity extends AppCompatActivity {
     private EditText inputNamaReg, inputPhoneReg, inputPassReg;
     private Spinner inputRtReg;
     private Button btnRegisterAction;
+
+    // Password Toggle
+    private ImageView btnTogglePassLogin, btnTogglePassReg;
+    private boolean isPasswordVisibleLogin = false;
+    private boolean isPasswordVisibleReg = false;
 
     // Firebase
     private FirebaseAuth mAuth;
@@ -97,7 +105,40 @@ public class LoginActivity extends AppCompatActivity {
 
         // Pastikan field password aktif (karena sebelumnya mungkin di-disable utk OTP)
         inputPasswordLogin.setEnabled(true);
-        inputPasswordLogin.setHint("Password");
+
+        // Setup Password Toggle untuk Login
+        btnTogglePassLogin = findViewById(R.id.btnTogglePassLogin);
+        btnTogglePassLogin.setOnClickListener(v -> {
+            isPasswordVisibleLogin = !isPasswordVisibleLogin;
+            if (isPasswordVisibleLogin) {
+                // Password visible
+                inputPasswordLogin.setInputType(InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                btnTogglePassLogin.setImageResource(R.drawable.icon_mata1);
+            } else {
+                // Password hidden
+                inputPasswordLogin.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                btnTogglePassLogin.setImageResource(R.drawable.icon_mata2);
+            }
+            // Pindahkan cursor ke akhir text
+            inputPasswordLogin.setSelection(inputPasswordLogin.getText().length());
+        });
+
+        // Setup Password Toggle untuk Register
+        btnTogglePassReg = findViewById(R.id.btnTogglePassReg);
+        btnTogglePassReg.setOnClickListener(v -> {
+            isPasswordVisibleReg = !isPasswordVisibleReg;
+            if (isPasswordVisibleReg) {
+                // Password visible
+                inputPassReg.setInputType(InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                btnTogglePassReg.setImageResource(R.drawable.icon_mata1);
+            } else {
+                // Password hidden
+                inputPassReg.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                btnTogglePassReg.setImageResource(R.drawable.icon_mata2);
+            }
+            // Pindahkan cursor ke akhir text
+            inputPassReg.setSelection(inputPassReg.getText().length());
+        });
     }
 
     private void setupSpinnerRt() {
@@ -326,30 +367,14 @@ public class LoginActivity extends AppCompatActivity {
                     .addOnSuccessListener(aVoid -> {
                         showLoading(false);
 
-                        // === PERUBAHAN DI SINI ===
-
-                        // 1. Tampilkan pesan sukses
-                        Toast.makeText(this, "Pendaftaran Berhasil! Silakan Login.", Toast.LENGTH_LONG).show();
-
-                        // 2. Logout dari sesi register (karena createUser otomatis login)
+                        // Logout dari sesi register (karena createUser otomatis login)
                         mAuth.signOut();
 
-                        // 3. Pindah UI ke Tab Masuk secara otomatis
-                        btnMasukTab.performClick();
-
-                        // 4. (Opsional) Bantu user mengisi No HP di form login agar tidak ketik ulang
-                        // Kembalikan format +62 ke 0 agar natural
-                        String displayPhone = phone.startsWith("+62") ? "0" + phone.substring(3) : phone;
-                        inputPhoneLogin.setText(displayPhone);
-                        inputPasswordLogin.setText(""); // Kosongkan password biar user ketik sendiri
-                        inputPasswordLogin.requestFocus(); // Arahkan kursor ke password
-
-                        // 5. Bersihkan form register
-                        inputNamaReg.setText("");
-                        inputPhoneReg.setText("");
-                        inputPassReg.setText("");
-
-                        // === SELESAI PERUBAHAN ===
+                        // Redirect ke halaman Pending Register
+                        Intent intent = new Intent(LoginActivity.this, PendingRegisterActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
                     })
                     .addOnFailureListener(e -> {
                         showLoading(false);
@@ -373,6 +398,31 @@ public class LoginActivity extends AppCompatActivity {
                             String idRt = document.getString("id_rt");
                             String jadwalHari = document.getString("jadwal_hari");
                             String jadwalId = document.getString("jadwal_id");
+                            String statusWarga = document.getString("status_warga");
+
+                            // === CEK STATUS AKUN ===
+                            // Hanya role "Warga" yang perlu dicek status, RT dan RW langsung bisa masuk
+                            if ("Warga".equals(role)) {
+                                if (statusWarga == null || "pending".equals(statusWarga)) {
+                                    // Akun belum diverifikasi oleh RT
+                                    showLoading(false);
+                                    mAuth.signOut();
+                                    Toast.makeText(this,
+                                            "Akun Anda belum diverifikasi oleh Ketua RT. Silakan tunggu persetujuan.",
+                                            Toast.LENGTH_LONG).show();
+                                    return;
+                                } else if ("rejected".equals(statusWarga)) {
+                                    // Akun ditolak
+                                    showLoading(false);
+                                    mAuth.signOut();
+                                    Toast.makeText(this,
+                                            "Akun Anda telah ditolak. Silakan hubungi Ketua RT.",
+                                            Toast.LENGTH_LONG).show();
+                                    return;
+                                }
+                                // statusWarga == "verified" -> lanjut ke dashboard
+                            }
+                            // === END CEK STATUS AKUN ===
 
                             // Cek apakah user lama tanpa jadwal_hari atau jadwal_id
                             if (jadwalHari == null || jadwalHari.isEmpty() || jadwalId == null || jadwalId.isEmpty()) {
