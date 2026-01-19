@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -149,15 +150,22 @@ public class DashboardRwActivity extends AppCompatActivity {
     private void setupLogout() {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
-                SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-                prefs.edit().clear().apply();
+                new AlertDialog.Builder(this)
+                        .setTitle("Konfirmasi Logout")
+                        .setMessage("Apakah Anda yakin ingin keluar?")
+                        .setPositiveButton("Ya, Keluar", (dialog, which) -> {
+                            SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+                            prefs.edit().clear().apply();
 
-                FirebaseAuth.getInstance().signOut();
+                            FirebaseAuth.getInstance().signOut();
 
-                Intent intent = new Intent(DashboardRwActivity.this, LoginActivity.class);
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                startActivity(intent);
-                finish();
+                            Intent intent = new Intent(DashboardRwActivity.this, LoginActivity.class);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                            startActivity(intent);
+                            finish();
+                        })
+                        .setNegativeButton("Batal", null)
+                        .show();
             });
         }
     }
