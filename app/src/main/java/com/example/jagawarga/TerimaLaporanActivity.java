@@ -65,9 +65,10 @@ public class TerimaLaporanActivity extends AppCompatActivity {
 
         progressBar.setVisibility(View.VISIBLE);
 
+        // Note: Removed orderBy to avoid requiring Firestore composite index
+        // Sorting is done client-side instead
         db.collection("laporan")
                 .whereEqualTo("id_rt", idRt)
-                .orderBy("tanggal", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     progressBar.setVisibility(View.GONE);
@@ -79,6 +80,20 @@ public class TerimaLaporanActivity extends AppCompatActivity {
                     for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
                         list.add(doc.getData());
                     }
+
+                    // Client-side sorting by tanggal (descending)
+                    list.sort((a, b) -> {
+                        com.google.firebase.Timestamp tsA = (com.google.firebase.Timestamp) a.get("tanggal");
+                        com.google.firebase.Timestamp tsB = (com.google.firebase.Timestamp) b.get("tanggal");
+                        if (tsA == null && tsB == null)
+                            return 0;
+                        if (tsA == null)
+                            return 1;
+                        if (tsB == null)
+                            return -1;
+                        return tsB.compareTo(tsA); // Descending
+                    });
+
                     LaporanAdapter adapter = new LaporanAdapter(list);
                     rvLaporan.setAdapter(adapter);
                 })

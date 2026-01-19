@@ -347,40 +347,37 @@ public class LoginActivity extends AppCompatActivity {
      * Menggunakan balanced assignment untuk jadwal hari
      */
     private void saveUserDataToFirestore(String uid, String phone, String nama, String rt) {
-        // Get balanced day (day with least users in this RT)
-        getBalancedDayForRt(rt, balancedDay -> {
-            // Generate unique jadwal ID
-            String jadwalId = generateJadwalId(rt);
+        // NOTE: jadwal_hari and jadwal_id are NOT assigned during registration
+        // They will be assigned when the account is verified by RT
 
-            Map<String, Object> user = new HashMap<>();
-            user.put("nama", nama);
-            user.put("telepon", phone);
-            user.put("id_rt", rt);
-            user.put("role", "Warga");
-            user.put("jadwal_hari", balancedDay);
-            user.put("jadwal_id", jadwalId);
-            user.put("status_warga", "pending");
-            user.put("createdAt", com.google.firebase.Timestamp.now());
+        Map<String, Object> user = new HashMap<>();
+        user.put("nama", nama);
+        user.put("telepon", phone);
+        user.put("id_rt", rt);
+        user.put("role", "Warga");
+        // jadwal_hari and jadwal_id intentionally NOT set - will be assigned on
+        // verification
+        user.put("status_warga", "pending");
+        user.put("createdAt", com.google.firebase.Timestamp.now());
 
-            db.collection("users").document(uid)
-                    .set(user)
-                    .addOnSuccessListener(aVoid -> {
-                        showLoading(false);
+        db.collection("users").document(uid)
+                .set(user)
+                .addOnSuccessListener(aVoid -> {
+                    showLoading(false);
 
-                        // Logout dari sesi register (karena createUser otomatis login)
-                        mAuth.signOut();
+                    // Logout dari sesi register (karena createUser otomatis login)
+                    mAuth.signOut();
 
-                        // Redirect ke halaman Pending Register
-                        Intent intent = new Intent(LoginActivity.this, PendingRegisterActivity.class);
-                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(intent);
-                        finish();
-                    })
-                    .addOnFailureListener(e -> {
-                        showLoading(false);
-                        Toast.makeText(this, "Gagal simpan data profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    });
-        }); // End of getBalancedDayForRt callback
+                    // Redirect ke halaman Pending Register
+                    Intent intent = new Intent(LoginActivity.this, PendingRegisterActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
+                    finish();
+                })
+                .addOnFailureListener(e -> {
+                    showLoading(false);
+                    Toast.makeText(this, "Gagal simpan data profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 
     /**
