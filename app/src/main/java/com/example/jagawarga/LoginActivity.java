@@ -19,6 +19,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.FrameLayout;
+import android.widget.CheckBox;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -56,6 +57,10 @@ public class LoginActivity extends AppCompatActivity {
     private boolean isPasswordVisibleLogin = false;
     private boolean isPasswordVisibleReg = false;
 
+    // Remember Me
+    private CheckBox checkRemember;
+    private boolean isAutoLogin = false; // Flag untuk menandai auto-login flow
+
     // Firebase
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
@@ -72,9 +77,19 @@ public class LoginActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // Cek jika user sudah login sebelumnya (Session check)
-        if (mAuth.getCurrentUser() != null) {
+        // Cek jika user sudah login sebelumnya DAN "Ingat Saya" aktif
+        SharedPreferences sessionPrefs = getSharedPreferences("user_data", MODE_PRIVATE);
+        boolean rememberMe = sessionPrefs.getBoolean("remember_me", false); // Default false - user harus centang manual
+        boolean hasSession = sessionPrefs.contains("id"); // Cek apakah ada session yang tersimpan
+
+        if (mAuth.getCurrentUser() != null && hasSession && rememberMe) {
+            // User sudah login dan centang "Ingat Saya" - langsung ke dashboard
+            isAutoLogin = true; // Tandai sebagai auto-login
             checkUserRole(mAuth.getCurrentUser().getUid());
+        } else if (mAuth.getCurrentUser() != null) {
+            // User tidak centang "Ingat Saya" ATAU session tidak ada, sign out Firebase
+            mAuth.signOut();
+            sessionPrefs.edit().clear().apply();
         }
 
         initViews();
@@ -95,6 +110,8 @@ public class LoginActivity extends AppCompatActivity {
         inputPhoneLogin = findViewById(R.id.inputPhoneLogin);
         inputPasswordLogin = findViewById(R.id.inputPasswordLogin);
         btnLogin = findViewById(R.id.btnLogin);
+        checkRemember = findViewById(R.id.checkRemember);
+        checkRemember.setChecked(false); // Default unchecked - user harus centang untuk tetap login
 
         // Register Inputs
         inputNamaReg = findViewById(R.id.inputNamaReg);
@@ -468,12 +485,30 @@ public class LoginActivity extends AppCompatActivity {
 
     private void saveSession(String id, String role, String nama, String idRt, String jadwalId) {
         SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+
+        // Get remember me state:
+        // - Jika auto-login, SELALU preserve existing value (jangan pakai checkbox
+        // karena di-reset ke false)
+        // - Jika fresh login, gunakan nilai dari checkbox
+        boolean rememberMe;
+        if (isAutoLogin) {
+            // Auto-login flow - preserve existing value, jangan ambil dari checkbox
+            rememberMe = prefs.getBoolean("remember_me", true);
+        } else if (checkRemember != null) {
+            // Fresh login - use checkbox value
+            rememberMe = checkRemember.isChecked();
+        } else {
+            // Fallback - preserve existing value
+            rememberMe = prefs.getBoolean("remember_me", true);
+        }
+
         prefs.edit()
                 .putString("id", id)
                 .putString("id_rt", idRt)
                 .putString("nama", nama)
                 .putString("role", role)
                 .putString("jadwal_id", jadwalId)
+                .putBoolean("remember_me", rememberMe)
                 .apply();
     }
 
