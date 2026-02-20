@@ -57,4 +57,28 @@ public class PrefUtils {
 
         return jadwalId;
     }
+
+    // Ambil Jadwal Hari
+    public static String getJadwalHari(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        return prefs.getString("jadwal_hari", null);
+    }
+
+    // Simpan Jadwal Hari
+    public static void setJadwalHari(Context context, String jadwalHari) {
+        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        prefs.edit().putString("jadwal_hari", jadwalHari).apply();
+    }
+
+    // Ambil Nama User
+    public static String getNama(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        return prefs.getString("nama", null);
+    }
+
+    // Ambil Role
+    public static String getRole(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        return prefs.getString("role", null);
+    }
 }

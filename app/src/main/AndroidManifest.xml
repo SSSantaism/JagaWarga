@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:usesCleartextTraffic="true"
@@ -90,6 +94,38 @@
             android:name=".AturRtRevokeActivity">
         </activity>
 
+        <!-- Firebase Cloud Messaging Service -->
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Ronda Reminder Alarm Receiver -->
+        <receiver
+            android:name=".RondaReminderManager$RondaReminderReceiver"
+            android:exported="false" />
+
+        <!-- Boot Completed Receiver untuk reschedule alarm setelah restart -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Tukar Jadwal Action Receiver untuk handle tombol notifikasi -->
+        <receiver
+            android:name=".TukarJadwalActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.jagawarga.ACTION_ACCEPT_SWAP" />
+                <action android:name="com.example.jagawarga.ACTION_REJECT_SWAP" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

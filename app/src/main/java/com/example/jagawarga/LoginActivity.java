@@ -1,10 +1,13 @@
 package com.example.jagawarga;
 
+import android.Manifest;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.transition.TransitionManager;
 import android.util.Log;
@@ -21,20 +24,22 @@ import android.widget.Toast;
 import android.widget.FrameLayout;
 import android.widget.CheckBox;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import android.text.InputType;
-import android.widget.ImageView;
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -456,18 +461,21 @@ public class LoginActivity extends AppCompatActivity {
                                                 String newJadwalId = (String) updates.get("jadwal_id");
                                                 if (newJadwalId == null)
                                                     newJadwalId = jadwalId;
-                                                saveSession(uid, role, nama, idRt, newJadwalId);
+                                                String newJadwalHari = (String) updates.get("jadwal_hari");
+                                                if (newJadwalHari == null)
+                                                    newJadwalHari = jadwalHari;
+                                                saveSession(uid, role, nama, idRt, newJadwalId, newJadwalHari);
                                                 redirectDashboard(role, nama);
                                             })
                                             .addOnFailureListener(e -> {
                                                 // Even if update fails, continue to dashboard
-                                                saveSession(uid, role, nama, idRt, jadwalId);
+                                                saveSession(uid, role, nama, idRt, jadwalId, jadwalHari);
                                                 redirectDashboard(role, nama);
                                             });
                                 });
                             } else {
                                 // User sudah punya jadwal, lanjut normal
-                                saveSession(uid, role, nama, idRt, jadwalId);
+                                saveSession(uid, role, nama, idRt, jadwalId, jadwalHari);
                                 redirectDashboard(role, nama);
                             }
                         } else {
@@ -483,7 +491,7 @@ public class LoginActivity extends AppCompatActivity {
                 });
     }
 
-    private void saveSession(String id, String role, String nama, String idRt, String jadwalId) {
+    private void saveSession(String id, String role, String nama, String idRt, String jadwalId, String jadwalHari) {
         SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
 
         // Get remember me state:
@@ -508,12 +516,17 @@ public class LoginActivity extends AppCompatActivity {
                 .putString("nama", nama)
                 .putString("role", role)
                 .putString("jadwal_id", jadwalId)
+                .putString("jadwal_hari", jadwalHari)
                 .putBoolean("remember_me", rememberMe)
                 .apply();
     }
 
     private void redirectDashboard(String role, String namaUser) {
         showLoading(false);
+
+        // Setup notifikasi setelah login berhasil
+        setupNotifications();
+
         Intent intent;
         if (role != null && role.equalsIgnoreCase("KetuaRT")) {
             intent = new Intent(this, DashboardRtActivity.class);
@@ -526,6 +539,72 @@ public class LoginActivity extends AppCompatActivity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+
+    /**
+     * Setup semua komponen notifikasi setelah login berhasil
+     */
+    private void setupNotifications() {
+        // 1. Request notification permission (Android 13+)
+        requestNotificationPermission();
+
+        // 2. Buat notification channels
+        NotificationHelper.createNotificationChannels(this);
+
+        // 3. Subscribe ke FCM Topic berdasarkan RT
+        String idRt = PrefUtils.getIdRt(this);
+        if (idRt != null) {
+            String topic = "rt_" + idRt;
+            FirebaseMessaging.getInstance().subscribeToTopic(topic)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            Log.d("FCM", "Subscribed to topic: " + topic);
+                        } else {
+                            Log.e("FCM", "Failed to subscribe to topic: " + topic);
+                        }
+                    });
+        }
+
+        // 4. Schedule ronda reminder (hanya untuk Warga)
+        String role = PrefUtils.getRole(this);
+        String jadwalHari = PrefUtils.getJadwalHari(this);
+        if ("Warga".equals(role) && jadwalHari != null) {
+            RondaReminderManager.scheduleWeeklyReminder(this, jadwalHari);
+            Log.d("Ronda", "Scheduled reminder for: " + jadwalHari);
+        }
+
+        // 5. Start tukar jadwal listener (hanya untuk Warga)
+        String userId = PrefUtils.getIdWarga(this);
+        if ("Warga".equals(role) && userId != null) {
+            TukarJadwalListener.startListening(this, userId);
+        }
+    }
+
+    /**
+     * Request POST_NOTIFICATIONS permission untuk Android 13+
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                        101);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+            @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 101) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d("Permission", "Notification permission granted");
+            } else {
+                Log.d("Permission", "Notification permission denied");
+            }
+        }
     }
 
     // Helper loading sederhana pakai Toast (bisa diganti ProgressDialog)
