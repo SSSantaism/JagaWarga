@@ -5,15 +5,15 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-
-import android.widget.LinearLayout;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -129,21 +129,21 @@ public class JadwalRondaActivity extends AppCompatActivity {
                 itemJadwal[i].setVisibility(View.GONE);
             }
             if (tvNama[i] != null) {
-                tvNama[i].setText("-");
+                tvNama[i].setText(getString(R.string.text_dash));
             }
             if (tvIdJadwal[i] != null) {
-                tvIdJadwal[i].setText("ID Jadwal: -");
+                tvIdJadwal[i].setText(getString(R.string.label_id_jadwal_dash));
             }
             if (tvJam[i] != null) {
-                tvJam[i].setText("-");
+                tvJam[i].setText(getString(R.string.text_dash));
             }
         }
 
         final String finalHari = hariIni;
         final String finalUserId = currentUserId;
-        db.collection("users")
-                .whereEqualTo("id_rt", currentRt)
-                .whereEqualTo("jadwal_hari", hariIni)
+        db.collection(Constants.COLLECTION_USERS)
+                .whereEqualTo(Constants.FIELD_ID_RT, currentRt)
+                .whereEqualTo(Constants.FIELD_JADWAL_HARI, hariIni)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     Log.d("JadwalRonda", "Query returned " + queryDocumentSnapshots.size() + " documents");
@@ -154,8 +154,8 @@ public class JadwalRondaActivity extends AppCompatActivity {
                             break;
 
                         String docId = doc.getId();
-                        String nama = doc.getString("nama");
-                        String jadwalId = doc.getString("jadwal_id");
+                        String nama = doc.getString(Constants.FIELD_NAMA);
+                        String jadwalId = doc.getString(Constants.FIELD_JADWAL_ID);
                         Log.d("JadwalRonda", "Found user: " + nama + ", jadwal_id: " + jadwalId);
 
                         // Show item and populate data
@@ -172,13 +172,14 @@ public class JadwalRondaActivity extends AppCompatActivity {
                             }
                         }
                         if (tvNama[index] != null) {
-                            tvNama[index].setText(nama != null ? nama : "-");
+                            tvNama[index].setText(nama != null ? nama : getString(R.string.text_dash));
                         }
                         if (tvIdJadwal[index] != null) {
-                            tvIdJadwal[index].setText("ID: " + (jadwalId != null ? jadwalId : "-"));
+                            tvIdJadwal[index].setText(getString(R.string.label_id_jadwal_format,
+                                    jadwalId != null ? jadwalId : getString(R.string.text_dash)));
                         }
                         if (tvJam[index] != null) {
-                            tvJam[index].setText("20:00 - 02:00");
+                            tvJam[index].setText(getString(R.string.text_jadwal_time));
                         }
                         index++;
                     }
@@ -189,7 +190,8 @@ public class JadwalRondaActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     Log.e("JadwalRonda", "Error loading jadwal: " + e.getMessage());
-                    Toast.makeText(this, "Gagal muat jadwal: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_load_jadwal_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 }

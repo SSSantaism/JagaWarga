@@ -4,6 +4,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
@@ -36,11 +37,11 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // Cek apakah ada data payload
         if (remoteMessage.getData().size() > 0) {
             Map<String, String> data = remoteMessage.getData();
-            String type = data.get("type");
+            String type = data.get(Constants.FCM_DATA_TYPE);
 
-            if ("pengumuman".equals(type)) {
-                String judul = data.get("judul");
-                String isi = data.get("isi");
+            if (Constants.FCM_TYPE_PENGUMUMAN.equals(type)) {
+                String judul = data.get(Constants.FCM_DATA_JUDUL);
+                String isi = data.get(Constants.FCM_DATA_ISI);
                 if (judul != null && isi != null) {
                     NotificationHelper.showPengumumanNotification(this, judul, isi);
                 }

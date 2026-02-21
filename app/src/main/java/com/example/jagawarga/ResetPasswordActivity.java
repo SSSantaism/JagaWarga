@@ -29,19 +29,13 @@ public class ResetPasswordActivity extends AppCompatActivity {
         initViews();
         setupListeners();
 
-        // Since we can only reset current user's password easily with Firebase Client SDK,
-        // we check if user is logged in. If not, we can't do much with "Fake Email" auth.
-        // We will assume this is "Change Password" feature for logged in user.
-        // If meant for "Forgot Password", it's limited.
-
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) {
-            Toast.makeText(this, "Fitur ini hanya untuk mengubah password saat login. Jika lupa password, hubungi Admin/RT.", Toast.LENGTH_LONG).show();
-            // finish(); // Don't close immediately so they can read toast, but maybe disable button
+            Toast.makeText(this, getString(R.string.toast_reset_password_info), Toast.LENGTH_LONG).show();
             btnReset.setEnabled(false);
         } else {
-             inputPhone.setText(user.getEmail()); // Just show email/ID
-             inputPhone.setEnabled(false); // Can't change target user
+            inputPhone.setText(user.getEmail());
+            inputPhone.setEnabled(false);
         }
     }
 
@@ -52,7 +46,7 @@ public class ResetPasswordActivity extends AppCompatActivity {
         btnBack = findViewById(R.id.btnBack);
         btnTogglePass = findViewById(R.id.btnTogglePass);
 
-        btnReset.setText("Ubah Password");
+        btnReset.setText(getString(R.string.btn_ubah_password));
     }
 
     private void setupListeners() {
@@ -74,7 +68,7 @@ public class ResetPasswordActivity extends AppCompatActivity {
             String newPass = inputPass.getText().toString().trim();
 
             if (newPass.isEmpty()) {
-                Toast.makeText(this, "Isi password baru!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_fill_new_password), Toast.LENGTH_SHORT).show();
             } else {
                 changePassword(newPass);
             }
@@ -87,10 +81,12 @@ public class ResetPasswordActivity extends AppCompatActivity {
             user.updatePassword(newPass)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
-                            Toast.makeText(this, "Password berhasil diubah", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this, getString(R.string.toast_password_changed), Toast.LENGTH_SHORT).show();
                             finish();
                         } else {
-                            Toast.makeText(this, "Gagal: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this,
+                                    getString(R.string.toast_password_change_failed, task.getException().getMessage()),
+                                    Toast.LENGTH_SHORT).show();
                         }
                     });
         }

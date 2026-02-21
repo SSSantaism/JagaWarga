@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -71,14 +72,14 @@ public class DashboardRwActivity extends AppCompatActivity {
     // LOAD DATA USER RW DARI SHAREDPREF
     // =======================================
     private void loadUserData() {
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
 
-        idRw = prefs.getString("id", null);
-        namaRw = prefs.getString("nama", "Pak RW");
-        idRtRw = prefs.getString("id_rt", null); // optional, kalau mau dipakai
+        idRw = prefs.getString(Constants.PREF_KEY_ID, null);
+        namaRw = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_pak_rw));
+        idRtRw = prefs.getString(Constants.PREF_KEY_ID_RT, null); // optional, kalau mau dipakai
 
         if (idRw == null) {
-            Toast.makeText(this, "Data RW tidak ditemukan, silakan login ulang", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.toast_rw_data_not_found), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -104,8 +105,8 @@ public class DashboardRwActivity extends AppCompatActivity {
 
     private void setGreeting() {
         // contoh: "Hai, Pak RW Budi !"
-        tvGreeting.setText("Hai, " + namaRw + " !");
-        tvSubGreeting.setText("Sudah siap ronda? 🌙");
+        tvGreeting.setText(getString(R.string.greeting_format, namaRw));
+        tvSubGreeting.setText(getString(R.string.sub_greeting_ronda));
     }
 
     private void setTodayDate() {
@@ -125,9 +126,9 @@ public class DashboardRwActivity extends AppCompatActivity {
                 Intent intent = new Intent(DashboardRwActivity.this, AturRtPromoteActivity.class);
 
                 // kalau mau kirim data RW ke halaman Atur RT:
-                intent.putExtra("id_rw", idRw);
-                intent.putExtra("nama_rw", namaRw);
-                intent.putExtra("id_rt_rw", idRtRw);
+                intent.putExtra(Constants.EXTRA_ID_RW, idRw);
+                intent.putExtra(Constants.EXTRA_NAMA_RW, namaRw);
+                intent.putExtra(Constants.EXTRA_ID_RT_RW, idRtRw);
 
                 startActivity(intent);
             });
@@ -138,7 +139,7 @@ public class DashboardRwActivity extends AppCompatActivity {
             menuBuatPengumuman.setOnClickListener(v -> {
                 Intent intent = new Intent(DashboardRwActivity.this, BuatPengumumanActivity.class);
                 // bisa juga kirim nama RW / id RW jika perlu
-                intent.putExtra("id_rw", idRw);
+                intent.putExtra(Constants.EXTRA_ID_RW, idRw);
                 startActivity(intent);
             });
         }
@@ -151,10 +152,10 @@ public class DashboardRwActivity extends AppCompatActivity {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
                 new AlertDialog.Builder(this)
-                        .setTitle("Konfirmasi Logout")
-                        .setMessage("Apakah Anda yakin ingin keluar?")
-                        .setPositiveButton("Ya, Keluar", (dialog, which) -> {
-                            SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+                        .setTitle(getString(R.string.dialog_logout_title))
+                        .setMessage(getString(R.string.dialog_logout_message))
+                        .setPositiveButton(getString(R.string.dialog_logout_positive), (dialog, which) -> {
+                            SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
                             prefs.edit().clear().apply();
 
                             FirebaseAuth.getInstance().signOut();
@@ -164,7 +165,7 @@ public class DashboardRwActivity extends AppCompatActivity {
                             startActivity(intent);
                             finish();
                         })
-                        .setNegativeButton("Batal", null)
+                        .setNegativeButton(getString(R.string.dialog_logout_negative), null)
                         .show();
             });
         }
@@ -174,8 +175,8 @@ public class DashboardRwActivity extends AppCompatActivity {
     // LOAD PENGUMUMAN (UNIVERSAL)
     // =======================================
     private void loadPengumuman() {
-        db.collection("pengumuman")
-                .orderBy("tanggal", Query.Direction.DESCENDING)
+        db.collection(Constants.COLLECTION_PENGUMUMAN)
+                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
@@ -212,24 +213,26 @@ public class DashboardRwActivity extends AppCompatActivity {
                 Map<String, Object> item = data.get(position);
 
                 // Format judul: "RT [id_rt] - [judul]"
-                String idRtPengumuman = (String) item.get("id_rt");
-                String judul = (String) item.get("judul");
-                String formattedJudul = "RT " + (idRtPengumuman != null ? idRtPengumuman : "-") + " - "
-                        + (judul != null ? judul : "-");
+                String idRtPengumuman = (String) item.get(Constants.FIELD_ID_RT);
+                String judul = (String) item.get(Constants.FIELD_JUDUL);
+                String formattedJudul = getString(R.string.pengumuman_judul_format,
+                        idRtPengumuman != null ? idRtPengumuman : "-",
+                        judul != null ? judul : "-");
                 holder.tvJudul.setText(formattedJudul);
 
                 // Isi pengumuman
-                String isi = (String) item.get("isi");
-                holder.tvIsi.setText(isi != null ? isi : "-");
+                String isi = (String) item.get(Constants.FIELD_ISI);
+                holder.tvIsi.setText(isi != null ? isi : getString(R.string.text_dash));
 
                 // Format tanggal: "DD MMM" (contoh: "12 Des")
-                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item.get("tanggal");
+                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
+                        .get(Constants.FIELD_TANGGAL);
                 if (timestamp != null) {
                     Date date = timestamp.toDate();
                     SimpleDateFormat sdfTanggal = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
                     holder.tvTanggal.setText(sdfTanggal.format(date));
                 } else {
-                    holder.tvTanggal.setText("-");
+                    holder.tvTanggal.setText(getString(R.string.text_dash));
                 }
             } catch (Exception e) {
                 e.printStackTrace();

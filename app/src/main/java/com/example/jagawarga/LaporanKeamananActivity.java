@@ -4,7 +4,6 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
-import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -16,6 +15,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.jagawarga.databinding.ActivityLaporanKeamananBinding;
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -55,7 +55,7 @@ public class LaporanKeamananActivity extends AppCompatActivity {
             String isi = binding.inputDetailLaporan.getText().toString();
 
             if (isi.isEmpty()) {
-                Toast.makeText(this, "Isi semua data terlebih dahulu", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_fill_all_data), Toast.LENGTH_SHORT).show();
             } else {
                 kirimLaporan();
             }
@@ -75,7 +75,7 @@ public class LaporanKeamananActivity extends AppCompatActivity {
 
     // --- Logic dropdown Jenis Laporan ---
     private void setupJenisLaporanSpinner() {
-        String[] jenisLaporan = new String[]{
+        String[] jenisLaporan = new String[] {
                 "Keributan",
                 "Perusakan",
                 "Pencurian",
@@ -86,8 +86,7 @@ public class LaporanKeamananActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 this,
                 android.R.layout.simple_spinner_item,
-                jenisLaporan
-        );
+                jenisLaporan);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
         spinnerJenisLaporan.setAdapter(adapter);
@@ -95,7 +94,8 @@ public class LaporanKeamananActivity extends AppCompatActivity {
 
     // --- Logic tombol back ---
     private void setupBackButton(ImageButton btnBack) {
-        if (btnBack == null) return;
+        if (btnBack == null)
+            return;
 
         btnBack.setOnClickListener(v -> finish());
     }
@@ -105,32 +105,33 @@ public class LaporanKeamananActivity extends AppCompatActivity {
         String isi = binding.inputDetailLaporan.getText().toString();
         String jenis = binding.spinnerJenisLaporan.getSelectedItem().toString();
 
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        String idWarga = prefs.getString("id", null);
-        String idRt = prefs.getString("id_rt", null);
-        String nama = prefs.getString("nama", "Warga");
+        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
+        String idWarga = prefs.getString(Constants.PREF_KEY_ID, null);
+        String idRt = prefs.getString(Constants.PREF_KEY_ID_RT, null);
+        String nama = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_warga));
 
         if (idWarga == null || idRt == null) {
-            Toast.makeText(this, "Error: id_warga/id_rt tidak ditemukan. User belum login?", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_id_not_found_login), Toast.LENGTH_LONG).show();
             return;
         }
 
         Map<String, Object> laporan = new HashMap<>();
-        laporan.put("id_warga", idWarga);
-        laporan.put("nama_pelapor", nama);
-        laporan.put("id_rt", idRt);
-        laporan.put("isi_laporan", isi);
-        laporan.put("jenis_laporan", jenis);
-        laporan.put("tanggal", Timestamp.now());
+        laporan.put(Constants.FIELD_ID_WARGA, idWarga);
+        laporan.put(Constants.FIELD_NAMA_PELAPOR, nama);
+        laporan.put(Constants.FIELD_ID_RT, idRt);
+        laporan.put(Constants.FIELD_ISI_LAPORAN, isi);
+        laporan.put(Constants.FIELD_JENIS_LAPORAN, jenis);
+        laporan.put(Constants.FIELD_TANGGAL, Timestamp.now());
 
-        db.collection("laporan").add(laporan)
+        db.collection(Constants.COLLECTION_LAPORAN).add(laporan)
                 .addOnSuccessListener(ref -> {
-                    Toast.makeText(this, "Laporan berhasil dikirim!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_laporan_sent), Toast.LENGTH_SHORT).show();
                     finish();
                 })
                 .addOnFailureListener(e -> {
-                     Log.e("FIRESTORE_LAPORAN", "Error: " + e.getMessage());
-                    Toast.makeText(this, "Gagal mengirim laporan: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Log.e("FIRESTORE_LAPORAN", "Error: " + e.getMessage());
+                    Toast.makeText(this, getString(R.string.toast_laporan_failed, e.getMessage()),
+                            Toast.LENGTH_LONG).show();
                 });
     }
 }

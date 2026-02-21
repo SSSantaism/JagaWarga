@@ -5,21 +5,23 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class AturRtRevokeActivity extends AppCompatActivity {
 
-    private EditText etIdWarga, etTelepon;
     private ImageButton btnBack;
+    private EditText etIdWarga, etTelepon;
     private Button btnAction;
-    private TextView tabPromosikan, tabTurunkan;
-
+    private Button tabPromosikan, tabTurunkan;
     private FirebaseFirestore db;
 
     @Override
@@ -29,78 +31,78 @@ public class AturRtRevokeActivity extends AppCompatActivity {
 
         db = FirebaseFirestore.getInstance();
 
-        initViews();
-        setupTabs();
-        setupButton();
-        setupBackButton();
-    }
-
-    private void initViews() {
         btnBack = findViewById(R.id.btnBack);
-
-        etIdWarga   = findViewById(R.id.inputIDWarga);
-        etTelepon   = findViewById(R.id.inputPhoneWarga);
-        btnAction   = findViewById(R.id.btnActionRevoke);
-
+        etIdWarga = findViewById(R.id.inputIDWarga);
+        etTelepon = findViewById(R.id.inputPhoneWarga);
+        btnAction = findViewById(R.id.btnActionRevoke);
         tabPromosikan = findViewById(R.id.btnTabPromote);
-        tabTurunkan   = findViewById(R.id.btnTabRevoke);
+        tabTurunkan = findViewById(R.id.btnTabRevoke);
 
-        btnAction.setText("Turunkan");
-        etIdWarga.setHint("Nama (Opsional)");
-    }
+        btnBack.setOnClickListener(v -> finish());
 
-    private void setupTabs() {
+        // Tab navigation
         tabPromosikan.setOnClickListener(v -> {
-            startActivity(new Intent(AturRtRevokeActivity.this, AturRtPromoteActivity.class));
+            Intent intent = new Intent(this, AturRtPromoteActivity.class);
+            startActivity(intent);
             finish();
         });
 
-        tabTurunkan.setOnClickListener(v -> {});
-    }
-
-    private void setupBackButton() {
-        btnBack.setOnClickListener(v -> onBackPressed());
-    }
-
-    private void setupButton() {
         btnAction.setOnClickListener(v -> {
-            String telepon = etTelepon.getText().toString().trim();
+            String rawPhone = etTelepon.getText().toString().trim();
 
-            if (telepon.isEmpty()) {
-                etTelepon.setError("No. telepon wajib diisi");
-                etTelepon.requestFocus();
+            if (rawPhone.isEmpty()) {
+                Toast.makeText(this, getString(R.string.error_phone_required), Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            if (telepon.startsWith("0")) telepon = "+62" + telepon.substring(1);
-            else if (!telepon.startsWith("+")) telepon = "+62" + telepon;
+            // Format nomor ke +62
+            String formatted = formatPhoneNumber(rawPhone);
 
-            revokeUser(telepon);
+            // Cari user berdasarkan nomor telepon
+            db.collection(Constants.COLLECTION_USERS)
+                    .whereEqualTo(Constants.FIELD_TELEPON, formatted)
+                    .get()
+                    .addOnSuccessListener(queryDocumentSnapshots -> {
+                        if (queryDocumentSnapshots.isEmpty()) {
+                            Toast.makeText(this, getString(R.string.toast_user_not_found), Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                            String uid = doc.getId();
+
+                            // Update role jadi Warga (turunkan)
+                            Map<String, Object> updates = new HashMap<>();
+                            updates.put(Constants.FIELD_ROLE, Constants.ROLE_WARGA);
+
+                            db.collection(Constants.COLLECTION_USERS).document(uid)
+                                    .update(updates)
+                                    .addOnSuccessListener(aVoid -> {
+                                        Toast.makeText(this, getString(R.string.toast_revoke_success),
+                                                Toast.LENGTH_SHORT).show();
+                                        finish();
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Toast.makeText(this,
+                                                getString(R.string.toast_update_failed, e.getMessage()),
+                                                Toast.LENGTH_SHORT).show();
+                                    });
+                            break;
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        Toast.makeText(this, getString(R.string.toast_search_user_failed, e.getMessage()),
+                                Toast.LENGTH_SHORT).show();
+                    });
         });
     }
 
-    private void revokeUser(String phone) {
-        db.collection("users")
-                .whereEqualTo("telepon", phone)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    if (queryDocumentSnapshots.isEmpty()) {
-                        Toast.makeText(this, "User tidak ditemukan", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        String uid = doc.getId();
-                        db.collection("users").document(uid)
-                                .update("role", "Warga")
-                                .addOnSuccessListener(aVoid -> {
-                                    Toast.makeText(this, "Berhasil diturunkan jadi Warga", Toast.LENGTH_LONG).show();
-                                    etTelepon.setText("");
-                                    etIdWarga.setText("");
-                                })
-                                .addOnFailureListener(e -> Toast.makeText(this, "Gagal update: " + e.getMessage(), Toast.LENGTH_SHORT).show());
-                    }
-                })
-                .addOnFailureListener(e -> Toast.makeText(this, "Error cari user: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+    private String formatPhoneNumber(String phone) {
+        if (phone.startsWith("0")) {
+            return "+62" + phone.substring(1);
+        } else if (!phone.startsWith("+")) {
+            return "+62" + phone;
+        }
+        return phone;
     }
 }

@@ -10,12 +10,11 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.firebase.Timestamp;
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
@@ -33,6 +32,7 @@ public class TerimaLaporanActivity extends AppCompatActivity {
     private ImageButton btnBack;
     private ProgressBar progressBar;
     private FirebaseFirestore db;
+    private String idRt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,103 +40,85 @@ public class TerimaLaporanActivity extends AppCompatActivity {
         setContentView(R.layout.activity_terima_laporan);
 
         db = FirebaseFirestore.getInstance();
+        idRt = PrefUtils.getIdRt(this);
 
-        // Inisialisasi View
         rvLaporan = findViewById(R.id.rvLaporanMasuk);
         btnBack = findViewById(R.id.btnBack);
         progressBar = findViewById(R.id.progressBar);
 
-        // Setup RecyclerView
         rvLaporan.setLayoutManager(new LinearLayoutManager(this));
 
-        // Tombol Kembali
         btnBack.setOnClickListener(v -> finish());
 
-        // Load Data
-        loadLaporan();
+        if (idRt != null) {
+            loadLaporan();
+        }
     }
 
     private void loadLaporan() {
-        String idRt = PrefUtils.getIdRt(this);
-        if (idRt == null) {
-            Toast.makeText(this, "ID RT tidak ditemukan, silakan login ulang", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (progressBar != null)
+            progressBar.setVisibility(View.VISIBLE);
 
-        progressBar.setVisibility(View.VISIBLE);
-
-        // Note: Removed orderBy to avoid requiring Firestore composite index
-        // Sorting is done client-side instead
-        db.collection("laporan")
-                .whereEqualTo("id_rt", idRt)
+        db.collection(Constants.COLLECTION_LAPORAN)
+                .whereEqualTo(Constants.FIELD_ID_RT, idRt)
+                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
-                    progressBar.setVisibility(View.GONE);
+                    if (progressBar != null)
+                        progressBar.setVisibility(View.GONE);
+
                     if (queryDocumentSnapshots.isEmpty()) {
-                        Toast.makeText(this, "Belum ada laporan masuk.", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_no_reports), Toast.LENGTH_SHORT).show();
+                        return;
                     }
 
-                    List<Map<String, Object>> list = new ArrayList<>();
+                    List<Map<String, Object>> dataList = new ArrayList<>();
                     for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        list.add(doc.getData());
+                        dataList.add(doc.getData());
                     }
-
-                    // Client-side sorting by tanggal (descending)
-                    list.sort((a, b) -> {
-                        com.google.firebase.Timestamp tsA = (com.google.firebase.Timestamp) a.get("tanggal");
-                        com.google.firebase.Timestamp tsB = (com.google.firebase.Timestamp) b.get("tanggal");
-                        if (tsA == null && tsB == null)
-                            return 0;
-                        if (tsA == null)
-                            return 1;
-                        if (tsB == null)
-                            return -1;
-                        return tsB.compareTo(tsA); // Descending
-                    });
-
-                    LaporanAdapter adapter = new LaporanAdapter(list);
-                    rvLaporan.setAdapter(adapter);
+                    rvLaporan.setAdapter(new LaporanAdapter(dataList));
                 })
                 .addOnFailureListener(e -> {
-                    progressBar.setVisibility(View.GONE);
-                    Log.e("FIRESTORE_LAPORAN", e.getMessage());
-                    Toast.makeText(this, "Gagal muat laporan: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    if (progressBar != null)
+                        progressBar.setVisibility(View.GONE);
+                    Toast.makeText(this, getString(R.string.toast_load_laporan_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 
-    // === ADAPTER ===
+    // --- ADAPTER ---
     class LaporanAdapter extends RecyclerView.Adapter<LaporanAdapter.Holder> {
         List<Map<String, Object>> data;
 
-        public LaporanAdapter(List<Map<String, Object>> data) {
+        LaporanAdapter(List<Map<String, Object>> data) {
             this.data = data;
         }
 
-        @NonNull
         @Override
-        public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
             View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_laporan_masuk, parent, false);
             return new Holder(v);
         }
 
         @Override
-        public void onBindViewHolder(@NonNull Holder holder, int position) {
+        public void onBindViewHolder(Holder holder, int position) {
             try {
                 Map<String, Object> item = data.get(position);
 
-                holder.tvJenis.setText((String) item.get("jenis_laporan"));
-                holder.tvNama.setText("Oleh: " + item.get("nama_pelapor"));
-                holder.tvDeskripsi.setText((String) item.get("isi_laporan"));
+                holder.tvJenis.setText((String) item.get(Constants.FIELD_JENIS_LAPORAN));
+                holder.tvNama.setText((String) item.get(Constants.FIELD_NAMA_PELAPOR));
+                holder.tvDeskripsi.setText((String) item.get(Constants.FIELD_ISI_LAPORAN));
 
-                Timestamp ts = (Timestamp) item.get("tanggal");
-                if (ts != null) {
-                    Date date = ts.toDate();
-                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
+                // Format tanggal
+                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
+                        .get(Constants.FIELD_TANGGAL);
+                if (timestamp != null) {
+                    Date date = timestamp.toDate();
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, HH:mm", new Locale("id", "ID"));
                     holder.tvWaktu.setText(sdf.format(date));
                 } else {
-                    holder.tvWaktu.setText("-");
+                    holder.tvWaktu.setText(getString(R.string.text_dash));
                 }
-
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -150,12 +132,12 @@ public class TerimaLaporanActivity extends AppCompatActivity {
         class Holder extends RecyclerView.ViewHolder {
             TextView tvJenis, tvNama, tvDeskripsi, tvWaktu;
 
-            public Holder(@NonNull View itemView) {
-                super(itemView);
-                tvJenis = itemView.findViewById(R.id.tvJenisLaporan);
-                tvNama = itemView.findViewById(R.id.tvNamaPelapor);
-                tvDeskripsi = itemView.findViewById(R.id.tvDeskripsi);
-                tvWaktu = itemView.findViewById(R.id.tvWaktu);
+            Holder(View v) {
+                super(v);
+                tvJenis = v.findViewById(R.id.tvJenisLaporan);
+                tvNama = v.findViewById(R.id.tvNamaPelapor);
+                tvDeskripsi = v.findViewById(R.id.tvDeskripsi);
+                tvWaktu = v.findViewById(R.id.tvWaktu);
             }
         }
     }

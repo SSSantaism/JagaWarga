@@ -10,6 +10,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
@@ -76,12 +77,14 @@ public class TukarJadwalActivity extends AppCompatActivity {
             String idJadwalTujuan = inputIdJadwalTujuan.getText().toString().trim().toUpperCase();
 
             if (idJadwalTujuan.isEmpty()) {
-                Toast.makeText(this, "Masukkan ID Jadwal tujuan!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_enter_target_jadwal),
+                        Toast.LENGTH_SHORT).show();
                 return;
             }
 
             if (idJadwalTujuan.equals(myJadwalId)) {
-                Toast.makeText(this, "Tidak bisa tukar dengan jadwal sendiri!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_cannot_swap_self),
+                        Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -92,29 +95,30 @@ public class TukarJadwalActivity extends AppCompatActivity {
 
     private void findTargetUserAndSendRequest(String targetJadwalId) {
         ProgressDialog pd = new ProgressDialog(this);
-        pd.setMessage("Mencari jadwal...");
+        pd.setMessage(getString(R.string.progress_searching_jadwal));
         pd.show();
 
         btnTukar.setEnabled(false);
 
         // Cari user dengan jadwal_id yang sesuai dan RT yang sama
-        db.collection("users")
-                .whereEqualTo("jadwal_id", targetJadwalId)
-                .whereEqualTo("id_rt", myIdRt)
+        db.collection(Constants.COLLECTION_USERS)
+                .whereEqualTo(Constants.FIELD_JADWAL_ID, targetJadwalId)
+                .whereEqualTo(Constants.FIELD_ID_RT, myIdRt)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     if (queryDocumentSnapshots.isEmpty()) {
                         pd.dismiss();
                         btnTukar.setEnabled(true);
-                        Toast.makeText(this, "ID Jadwal tidak ditemukan di RT Anda!", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_jadwal_not_found_rt),
+                                Toast.LENGTH_SHORT).show();
                         return;
                     }
 
                     // Ambil data target user
                     for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
                         String targetUserId = doc.getId();
-                        String targetNama = doc.getString("nama");
-                        String targetJadwalHari = doc.getString("jadwal_hari");
+                        String targetNama = doc.getString(Constants.FIELD_NAMA);
+                        String targetJadwalHari = doc.getString(Constants.FIELD_JADWAL_HARI);
 
                         // Kirim permintaan tukar jadwal
                         sendSwapRequest(pd, targetUserId, targetNama, targetJadwalHari, targetJadwalId);
@@ -125,49 +129,51 @@ public class TukarJadwalActivity extends AppCompatActivity {
                     pd.dismiss();
                     btnTukar.setEnabled(true);
                     Log.e(TAG, "Error finding target: " + e.getMessage());
-                    Toast.makeText(this, "Gagal mencari jadwal: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_swap_search_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 
     private void sendSwapRequest(ProgressDialog pd, String targetUserId, String targetNama,
             String targetJadwalHari, String targetJadwalId) {
-        pd.setMessage("Mengirim permintaan...");
+        pd.setMessage(getString(R.string.progress_sending_request));
 
         // Cek apakah sudah ada permintaan pending yang sama
-        db.collection("tukar_jadwal")
-                .whereEqualTo("dari_id", myUserId)
-                .whereEqualTo("kepada_id", targetUserId)
-                .whereEqualTo("status", "pending")
+        db.collection(Constants.COLLECTION_TUKAR_JADWAL)
+                .whereEqualTo(Constants.FIELD_DARI_ID, myUserId)
+                .whereEqualTo(Constants.FIELD_KEPADA_ID, targetUserId)
+                .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_PENDING)
                 .get()
                 .addOnSuccessListener(existing -> {
                     if (!existing.isEmpty()) {
                         pd.dismiss();
                         btnTukar.setEnabled(true);
-                        Toast.makeText(this, "Anda sudah mengirim permintaan ke user ini!", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_swap_request_exists),
+                                Toast.LENGTH_SHORT).show();
                         return;
                     }
 
                     // Buat document permintaan tukar jadwal
                     Map<String, Object> swapRequest = new HashMap<>();
-                    swapRequest.put("dari_id", myUserId);
-                    swapRequest.put("dari_nama", myNama);
-                    swapRequest.put("dari_jadwal_id", myJadwalId);
-                    swapRequest.put("hari_dari", myJadwalHari);
-                    swapRequest.put("kepada_id", targetUserId);
-                    swapRequest.put("kepada_nama", targetNama);
-                    swapRequest.put("kepada_jadwal_id", targetJadwalId);
-                    swapRequest.put("hari_kepada", targetJadwalHari);
-                    swapRequest.put("id_rt", myIdRt);
-                    swapRequest.put("status", "pending");
-                    swapRequest.put("created_at", Timestamp.now());
+                    swapRequest.put(Constants.FIELD_DARI_ID, myUserId);
+                    swapRequest.put(Constants.FIELD_DARI_NAMA, myNama);
+                    swapRequest.put(Constants.FIELD_DARI_JADWAL_ID, myJadwalId);
+                    swapRequest.put(Constants.FIELD_HARI_DARI, myJadwalHari);
+                    swapRequest.put(Constants.FIELD_KEPADA_ID, targetUserId);
+                    swapRequest.put(Constants.FIELD_KEPADA_NAMA, targetNama);
+                    swapRequest.put(Constants.FIELD_KEPADA_JADWAL_ID, targetJadwalId);
+                    swapRequest.put(Constants.FIELD_HARI_KEPADA, targetJadwalHari);
+                    swapRequest.put(Constants.FIELD_ID_RT, myIdRt);
+                    swapRequest.put(Constants.FIELD_STATUS, Constants.STATUS_PENDING);
+                    swapRequest.put(Constants.FIELD_CREATED_AT, Timestamp.now());
 
-                    db.collection("tukar_jadwal")
+                    db.collection(Constants.COLLECTION_TUKAR_JADWAL)
                             .add(swapRequest)
                             .addOnSuccessListener(documentReference -> {
                                 pd.dismiss();
                                 Log.d(TAG, "Swap request created: " + documentReference.getId());
                                 Toast.makeText(this,
-                                        "Permintaan tukar jadwal dikirim ke " + targetNama + "!",
+                                        getString(R.string.toast_swap_request_sent, targetNama),
                                         Toast.LENGTH_LONG).show();
                                 finish();
                             })
@@ -175,7 +181,8 @@ public class TukarJadwalActivity extends AppCompatActivity {
                                 pd.dismiss();
                                 btnTukar.setEnabled(true);
                                 Log.e(TAG, "Error sending request: " + e.getMessage());
-                                Toast.makeText(this, "Gagal mengirim permintaan: " + e.getMessage(),
+                                Toast.makeText(this,
+                                        getString(R.string.toast_swap_request_failed, e.getMessage()),
                                         Toast.LENGTH_SHORT).show();
                             });
                 })
@@ -183,7 +190,8 @@ public class TukarJadwalActivity extends AppCompatActivity {
                     pd.dismiss();
                     btnTukar.setEnabled(true);
                     Log.e(TAG, "Error checking existing: " + e.getMessage());
-                    Toast.makeText(this, "Gagal: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_generic_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 }

@@ -5,16 +5,17 @@ import android.content.SharedPreferences;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.example.jagawarga.utils.Constants;
+
 public class PrefUtils {
 
     // Ambil ID RT
     public static String getIdRt(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        // Pastikan key ini sesuai dengan yang disimpan di LoginActivity ("id_rt")
-        String idRt = prefs.getString("id_rt", null);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        String idRt = prefs.getString(Constants.PREF_KEY_ID_RT, null);
 
         if (idRt == null) {
-            Toast.makeText(context, "ID RT tidak ditemukan, silakan login ulang!", Toast.LENGTH_LONG).show();
+            Toast.makeText(context, context.getString(R.string.toast_id_rt_not_found), Toast.LENGTH_LONG).show();
         } else {
             Log.d("DEBUG_RT", "ID RT dari SharedPreferences = " + idRt);
         }
@@ -24,18 +25,17 @@ public class PrefUtils {
 
     // Ambil ID Warga
     public static String getIdWarga(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
 
-        // PERBAIKAN: Ubah "id_warga" menjadi "id" agar sesuai dengan LoginActivity
-        String idWarga = prefs.getString("id", null);
+        String idWarga = prefs.getString(Constants.PREF_KEY_ID, null);
 
         if (idWarga == null) {
             // Coba cari key lama "id_warga" buat jaga-jaga (backward compatibility)
-            idWarga = prefs.getString("id_warga", null);
+            idWarga = prefs.getString(Constants.PREF_KEY_ID_WARGA_LEGACY, null);
         }
 
         if (idWarga == null) {
-            Toast.makeText(context, "ID Warga tidak ditemukan (Sesi Habis). Silakan Logout & Login ulang.",
+            Toast.makeText(context, context.getString(R.string.toast_id_warga_not_found),
                     Toast.LENGTH_LONG).show();
         } else {
             Log.d("DEBUG_WARGA", "ID Warga ditemukan: " + idWarga);
@@ -46,8 +46,8 @@ public class PrefUtils {
 
     // Ambil Jadwal ID
     public static String getJadwalId(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        String jadwalId = prefs.getString("jadwal_id", null);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        String jadwalId = prefs.getString(Constants.PREF_KEY_JADWAL_ID, null);
 
         if (jadwalId == null) {
             Log.d("DEBUG_JADWAL", "Jadwal ID tidak ditemukan di session");
@@ -60,25 +60,25 @@ public class PrefUtils {
 
     // Ambil Jadwal Hari
     public static String getJadwalHari(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        return prefs.getString("jadwal_hari", null);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        return prefs.getString(Constants.PREF_KEY_JADWAL_HARI, null);
     }
 
     // Simpan Jadwal Hari
     public static void setJadwalHari(Context context, String jadwalHari) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        prefs.edit().putString("jadwal_hari", jadwalHari).apply();
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        prefs.edit().putString(Constants.PREF_KEY_JADWAL_HARI, jadwalHari).apply();
     }
 
     // Ambil Nama User
     public static String getNama(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        return prefs.getString("nama", null);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        return prefs.getString(Constants.PREF_KEY_NAMA, null);
     }
 
     // Ambil Role
     public static String getRole(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE);
-        return prefs.getString("role", null);
+        SharedPreferences prefs = context.getSharedPreferences(Constants.PREF_USER_DATA, Context.MODE_PRIVATE);
+        return prefs.getString(Constants.PREF_KEY_ROLE, null);
     }
 }

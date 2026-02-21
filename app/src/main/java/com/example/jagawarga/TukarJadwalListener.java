@@ -3,6 +3,7 @@ package com.example.jagawarga;
 import android.content.Context;
 import android.util.Log;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -34,9 +35,9 @@ public class TukarJadwalListener {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
 
         // Listen ke collection tukar_jadwal dimana user ini adalah target
-        listenerRegistration = db.collection("tukar_jadwal")
-                .whereEqualTo("kepada_id", userId)
-                .whereEqualTo("status", "pending")
+        listenerRegistration = db.collection(Constants.COLLECTION_TUKAR_JADWAL)
+                .whereEqualTo(Constants.FIELD_KEPADA_ID, userId)
+                .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_PENDING)
                 .addSnapshotListener((snapshots, error) -> {
                     if (error != null) {
                         Log.e(TAG, "Listen failed: " + error.getMessage());
@@ -54,8 +55,8 @@ public class TukarJadwalListener {
                         if (dc.getType() == DocumentChange.Type.ADDED) {
                             // Ada permintaan tukar jadwal baru
                             String docId = dc.getDocument().getId();
-                            String dariNama = dc.getDocument().getString("dari_nama");
-                            String hariTukar = dc.getDocument().getString("hari_dari");
+                            String dariNama = dc.getDocument().getString(Constants.FIELD_DARI_NAMA);
+                            String hariTukar = dc.getDocument().getString(Constants.FIELD_HARI_DARI);
 
                             if (dariNama != null && hariTukar != null) {
                                 Log.d(TAG, "New swap request from: " + dariNama + ", docId: " + docId);

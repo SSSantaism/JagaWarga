@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">JagaWarga</string>
 
+    <!-- === Tukar Jadwal Screen === -->
     <string name="title_tukar_jadwal">Tukar Jadwal</string>
     <string name="cd_kembali">Kembali</string>
     <string name="cd_absen_illustration">Ilustrasi tukar jadwal</string>
@@ -8,16 +9,158 @@
     <string name="label_id_jadwal_tujuan">ID Jadwal Tujuan</string>
     <string name="btn_absen_sekarang">Tukar Jadwal</string>
 
+    <!-- === Absen Ronda Screen === -->
     <string name="title_absen_ronda">Absen Ronda</string>
-
     <string name="label_tanggal_absen">Tanggal Absen</string>
     <string name="label_shift">Shift</string>
     <string name="label_lokasi_ronda">Lokasi Ronda</string>
-
     <string name="hint_pilih_tanggal">Pilih Tanggal</string>
     <string name="hint_pilih_shift">Pilih Shift</string>
     <string name="hint_pilih_lokasi">Pilih Lokasi</string>
-
     <string name="btn_upload_laporan">Upload Laporan</string>
+
+    <!-- === Loading / Processing === -->
+    <string name="toast_loading">Memproses…</string>
+
+    <!-- === Login Activity === -->
+    <string name="toast_fill_phone_password">Isi Nomor HP dan Password!</string>
+    <string name="toast_all_data_required">Semua data wajib diisi!</string>
+    <string name="toast_password_min_length">Password minimal 6 karakter</string>
+    <string name="toast_login_failed">Gagal Masuk: %1$s</string>
+    <string name="toast_login_failed_default">Login Gagal</string>
+    <string name="toast_register_failed">Gagal Daftar: %1$s</string>
+    <string name="toast_register_failed_default">Register Gagal</string>
+    <string name="toast_save_profile_failed">Gagal simpan data profil: %1$s</string>
+    <string name="toast_account_pending">Akun Anda belum diverifikasi oleh Ketua RT. Silakan tunggu persetujuan.</string>
+    <string name="toast_account_rejected">Akun Anda telah ditolak. Silakan hubungi Ketua RT.</string>
+    <string name="toast_profile_not_found">Data profil tidak ditemukan. Hubungi Admin.</string>
+    <string name="toast_fetch_user_failed">Gagal mengambil data user (Koneksi/Error)</string>
+
+    <!-- === Greeting / Fallback Names === -->
+    <string name="greeting_format">Hai, %1$s !</string>
+    <string name="sub_greeting_ronda">Sudah siap ronda? 🌙</string>
+    <string name="fallback_name_pengguna">Pengguna</string>
+    <string name="fallback_name_pak_rt">Pak RT</string>
+    <string name="fallback_name_pak_rw">Pak RW</string>
+    <string name="fallback_name_warga">Warga</string>
+    <string name="fallback_name_user">User</string>
+
+    <!-- === Logout Dialog === -->
+    <string name="dialog_logout_title">Konfirmasi Logout</string>
+    <string name="dialog_logout_message">Apakah Anda yakin ingin keluar?</string>
+    <string name="dialog_logout_positive">Ya, Keluar</string>
+    <string name="dialog_logout_negative">Batal</string>
+
+    <!-- === Dashboard Activity === -->
+    <string name="text_belum_diatur">Belum diatur</string>
+    <string name="toast_no_whatsapp_number">Nomor pos ronda belum tersedia</string>
+    <string name="toast_no_whatsapp_app">Tidak ada aplikasi WhatsApp</string>
+    <string name="text_dash">-</string>
+
+    <!-- === Dashboard RW Activity === -->
+    <string name="toast_rw_data_not_found">Data RW tidak ditemukan, silakan login ulang</string>
+
+    <!-- === PrefUtils / Session === -->
+    <string name="toast_id_rt_not_found">ID RT tidak ditemukan, silakan login ulang!</string>
+    <string name="toast_id_warga_not_found">ID Warga tidak ditemukan (Sesi Habis). Silakan Logout &amp; Login ulang.</string>
+
+    <!-- === Absen Ronda Activity === -->
+    <string name="toast_absen_verifying">Memverifikasi jadwal…</string>
+    <string name="toast_absen_wrong_day">Maaf, hari ini (%1$s) bukan jadwal ronda Anda (%2$s).</string>
+    <string name="toast_absen_success">Absen berhasil dikirim! Menunggu validasi RT.</string>
+    <string name="toast_absen_failed">Gagal kirim absen: %1$s</string>
+    <string name="toast_verify_profile_failed">Gagal verifikasi profil: %1$s</string>
+    <string name="hint_jadwal_not_found">ID Jadwal tidak ditemukan</string>
+
+    <!-- === Atur RT Promote/Revoke === -->
+    <string name="btn_promosikan">Promosikan</string>
+    <string name="btn_turunkan">Turunkan</string>
+    <string name="hint_nama_opsional">Nama (Opsional)</string>
+    <string name="error_phone_required">No. telepon wajib diisi</string>
+    <string name="toast_user_not_found">User tidak ditemukan</string>
+    <string name="toast_promote_success">Berhasil dipromosikan jadi Ketua RT</string>
+    <string name="toast_revoke_success">Berhasil diturunkan jadi Warga</string>
+    <string name="toast_update_failed">Gagal update: %1$s</string>
+    <string name="toast_search_user_failed">Error cari user: %1$s</string>
+
+    <!-- === Buat Pengumuman === -->
+    <string name="toast_judul_isi_required">Judul dan Isi tidak boleh kosong!</string>
+    <string name="toast_session_expired">Sesi habis, login ulang!</string>
+    <string name="progress_publishing">Menerbitkan…</string>
+    <string name="toast_publish_success">Berhasil diterbitkan!</string>
+    <string name="toast_publish_failed">Gagal: %1$s</string>
+
+    <!-- === Laporan Keamanan === -->
+    <string name="toast_fill_all_data">Isi semua data terlebih dahulu</string>
+    <string name="toast_id_not_found_login">Error: id_warga/id_rt tidak ditemukan. User belum login?</string>
+    <string name="toast_laporan_sent">Laporan berhasil dikirim!</string>
+    <string name="toast_laporan_failed">Gagal mengirim laporan: %1$s</string>
+
+    <!-- === List Permintaan === -->
+    <string name="toast_no_pending_register">Tidak ada register baru</string>
+    <string name="toast_warga_accepted">Warga diterima dan jadwal telah diassign (%1$s)</string>
+    <string name="toast_warga_rejected">Warga ditolak</string>
+    <string name="toast_no_pending_absen">Tidak ada absen pending</string>
+    <string name="toast_absen_accepted">Absen diterima</string>
+    <string name="toast_absen_rejected">Absen ditolak</string>
+    <string name="toast_load_failed">Gagal memuat: %1$s</string>
+    <string name="label_pukul_format">Pukul: %1$s</string>
+    <string name="toast_error_generic">Error: %1$s</string>
+
+    <!-- === Terima Laporan === -->
+    <string name="label_oleh_format">Oleh: %1$s</string>
+    <string name="toast_no_reports">Belum ada laporan masuk.</string>
+    <string name="toast_load_laporan_failed">Gagal muat laporan: %1$s</string>
+
+    <!-- === Jadwal Ronda === -->
+    <string name="label_id_jadwal_format">ID: %1$s</string>
+    <string name="text_jadwal_time">20:00 - 02:00</string>
+    <string name="toast_load_jadwal_failed">Gagal muat jadwal: %1$s</string>
+    <string name="label_id_jadwal_dash">ID Jadwal: -</string>
+
+    <!-- === Tukar Jadwal Activity === -->
+    <string name="toast_enter_target_jadwal">Masukkan ID Jadwal tujuan!</string>
+    <string name="toast_cannot_swap_self">Tidak bisa tukar dengan jadwal sendiri!</string>
+    <string name="progress_searching_jadwal">Mencari jadwal…</string>
+    <string name="progress_sending_request">Mengirim permintaan…</string>
+    <string name="toast_jadwal_not_found_rt">ID Jadwal tidak ditemukan di RT Anda!</string>
+    <string name="toast_swap_request_exists">Anda sudah mengirim permintaan ke user ini!</string>
+    <string name="toast_swap_request_sent">Permintaan tukar jadwal dikirim ke %1$s!</string>
+    <string name="toast_swap_request_failed">Gagal mengirim permintaan: %1$s</string>
+    <string name="toast_swap_search_failed">Gagal mencari jadwal: %1$s</string>
+    <string name="toast_generic_failed">Gagal: %1$s</string>
+
+    <!-- === Notification Helper === -->
+    <string name="notif_title_pengumuman_format">📢 %1$s</string>
+    <string name="notif_title_jadwal_ronda">🌙 Jadwal Ronda Malam Ini</string>
+    <string name="notif_body_jadwal_ronda">Jangan lupa, malam ini adalah jadwal ronda Anda!</string>
+    <string name="notif_title_tukar_jadwal">🔄 Permintaan Tukar Jadwal</string>
+    <string name="notif_body_tukar_jadwal">%1$s ingin bertukar jadwal dengan Anda untuk hari %2$s</string>
+    <string name="notif_channel_pengumuman">Pengumuman RT/RW</string>
+    <string name="notif_channel_pengumuman_desc">Notifikasi pengumuman dari Ketua RT/RW</string>
+    <string name="notif_channel_jadwal">Pengingat Jadwal Ronda</string>
+    <string name="notif_channel_jadwal_desc">Pengingat jadwal ronda malam ini</string>
+    <string name="notif_channel_tukar">Permintaan Tukar Jadwal</string>
+    <string name="notif_channel_tukar_desc">Notifikasi permintaan tukar jadwal dari warga lain</string>
+    <string name="notif_action_accept">✅ Setuju</string>
+    <string name="notif_action_reject">❌ Tolak</string>
+
+    <!-- === Tukar Jadwal Action Receiver === -->
+    <string name="toast_swap_request_not_found">Permintaan tidak ditemukan</string>
+    <string name="toast_swap_data_incomplete">Data tidak lengkap</string>
+    <string name="toast_swap_success">✅ Jadwal berhasil ditukar!</string>
+    <string name="toast_swap_failed">Gagal menukar jadwal: %1$s</string>
+    <string name="toast_swap_process_failed">Gagal memproses: %1$s</string>
+    <string name="toast_swap_rejected">❌ Permintaan tukar jadwal ditolak</string>
+
+    <!-- === Reset Password === -->
+    <string name="toast_reset_password_info">Fitur ini hanya untuk mengubah password saat login. Jika lupa password, hubungi Admin/RT.</string>
+    <string name="btn_ubah_password">Ubah Password</string>
+    <string name="toast_fill_new_password">Isi password baru!</string>
+    <string name="toast_password_changed">Password berhasil diubah</string>
+    <string name="toast_password_change_failed">Gagal: %1$s</string>
+
+    <!-- === Pengumuman Adapter (shared) === -->
+    <string name="pengumuman_judul_format">RT %1$s - %2$s</string>
 
 </resources>

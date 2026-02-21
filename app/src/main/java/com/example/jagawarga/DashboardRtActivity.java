@@ -16,6 +16,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -47,13 +48,13 @@ public class DashboardRtActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
 
         // ====== 1. Greeting nama RT ======
-        String namaRt = getIntent().getStringExtra("nama_user");
+        String namaRt = getIntent().getStringExtra(Constants.EXTRA_NAMA_USER);
         if (namaRt == null || namaRt.trim().isEmpty()) {
-            namaRt = "Pak RT";
+            namaRt = getString(R.string.fallback_name_pak_rt);
         }
 
         TextView tvGreetingRt = findViewById(R.id.tvGreetingRt);
-        tvGreetingRt.setText("Hai, " + namaRt + " !");
+        tvGreetingRt.setText(getString(R.string.greeting_format, namaRt));
 
         // ====== 2. Set tanggal hari ini ======
         TextView tvTanggalRt = findViewById(R.id.tvTanggalRt);
@@ -94,10 +95,10 @@ public class DashboardRtActivity extends AppCompatActivity {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
                 new AlertDialog.Builder(this)
-                        .setTitle("Konfirmasi Logout")
-                        .setMessage("Apakah Anda yakin ingin keluar?")
-                        .setPositiveButton("Ya, Keluar", (dialog, which) -> {
-                            SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+                        .setTitle(getString(R.string.dialog_logout_title))
+                        .setMessage(getString(R.string.dialog_logout_message))
+                        .setPositiveButton(getString(R.string.dialog_logout_positive), (dialog, which) -> {
+                            SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
                             prefs.edit().clear().apply();
 
                             FirebaseAuth.getInstance().signOut();
@@ -107,7 +108,7 @@ public class DashboardRtActivity extends AppCompatActivity {
                             startActivity(intent);
                             finish();
                         })
-                        .setNegativeButton("Batal", null)
+                        .setNegativeButton(getString(R.string.dialog_logout_negative), null)
                         .show();
             });
         }
@@ -115,8 +116,8 @@ public class DashboardRtActivity extends AppCompatActivity {
 
     // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) - UNIVERSAL UNTUK SEMUA USER ---
     private void loadPengumuman() {
-        db.collection("pengumuman")
-                .orderBy("tanggal", Query.Direction.DESCENDING)
+        db.collection(Constants.COLLECTION_PENGUMUMAN)
+                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
@@ -153,24 +154,26 @@ public class DashboardRtActivity extends AppCompatActivity {
                 Map<String, Object> item = data.get(position);
 
                 // Format judul: "RT [id_rt] - [judul]"
-                String idRtPengumuman = (String) item.get("id_rt");
-                String judul = (String) item.get("judul");
-                String formattedJudul = "RT " + (idRtPengumuman != null ? idRtPengumuman : "-") + " - "
-                        + (judul != null ? judul : "-");
+                String idRtPengumuman = (String) item.get(Constants.FIELD_ID_RT);
+                String judul = (String) item.get(Constants.FIELD_JUDUL);
+                String formattedJudul = getString(R.string.pengumuman_judul_format,
+                        idRtPengumuman != null ? idRtPengumuman : "-",
+                        judul != null ? judul : "-");
                 holder.tvJudul.setText(formattedJudul);
 
                 // Isi pengumuman
-                String isi = (String) item.get("isi");
-                holder.tvIsi.setText(isi != null ? isi : "-");
+                String isi = (String) item.get(Constants.FIELD_ISI);
+                holder.tvIsi.setText(isi != null ? isi : getString(R.string.text_dash));
 
                 // Format tanggal: "DD MMM" (contoh: "12 Des")
-                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item.get("tanggal");
+                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
+                        .get(Constants.FIELD_TANGGAL);
                 if (timestamp != null) {
                     Date date = timestamp.toDate();
                     SimpleDateFormat sdfTanggal = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
                     holder.tvTanggal.setText(sdfTanggal.format(date));
                 } else {
-                    holder.tvTanggal.setText("-");
+                    holder.tvTanggal.setText(getString(R.string.text_dash));
                 }
             } catch (Exception e) {
                 e.printStackTrace();

@@ -29,6 +29,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -83,9 +84,10 @@ public class LoginActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
 
         // Cek jika user sudah login sebelumnya DAN "Ingat Saya" aktif
-        SharedPreferences sessionPrefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        boolean rememberMe = sessionPrefs.getBoolean("remember_me", false); // Default false - user harus centang manual
-        boolean hasSession = sessionPrefs.contains("id"); // Cek apakah ada session yang tersimpan
+        SharedPreferences sessionPrefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
+        boolean rememberMe = sessionPrefs.getBoolean(Constants.PREF_KEY_REMEMBER_ME, false); // Default false - user
+                                                                                             // harus centang manual
+        boolean hasSession = sessionPrefs.contains(Constants.PREF_KEY_ID); // Cek apakah ada session yang tersimpan
 
         if (mAuth.getCurrentUser() != null && hasSession && rememberMe) {
             // User sudah login dan centang "Ingat Saya" - langsung ke dashboard
@@ -218,7 +220,7 @@ public class LoginActivity extends AppCompatActivity {
             String password = inputPasswordLogin.getText().toString().trim();
 
             if (rawPhone.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "Isi Nomor HP dan Password!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_fill_phone_password), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -234,8 +236,9 @@ public class LoginActivity extends AppCompatActivity {
                         } else {
                             showLoading(false);
                             String error = task.getException() != null ? task.getException().getMessage()
-                                    : "Login Gagal";
-                            Toast.makeText(this, "Gagal Masuk: " + error, Toast.LENGTH_LONG).show();
+                                    : getString(R.string.toast_login_failed_default);
+                            Toast.makeText(this, getString(R.string.toast_login_failed, error), Toast.LENGTH_LONG)
+                                    .show();
                         }
                     });
         });
@@ -250,12 +253,12 @@ public class LoginActivity extends AppCompatActivity {
             String rt = inputRtReg.getSelectedItem().toString();
 
             if (nama.isEmpty() || rawPhone.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "Semua data wajib diisi!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_all_data_required), Toast.LENGTH_SHORT).show();
                 return;
             }
 
             if (password.length() < 6) {
-                Toast.makeText(this, "Password minimal 6 karakter", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_password_min_length), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -276,8 +279,9 @@ public class LoginActivity extends AppCompatActivity {
                         } else {
                             showLoading(false);
                             String error = task.getException() != null ? task.getException().getMessage()
-                                    : "Register Gagal";
-                            Toast.makeText(this, "Gagal Daftar: " + error, Toast.LENGTH_LONG).show();
+                                    : getString(R.string.toast_register_failed_default);
+                            Toast.makeText(this, getString(R.string.toast_register_failed, error), Toast.LENGTH_LONG)
+                                    .show();
                         }
                     });
         });
@@ -324,9 +328,9 @@ public class LoginActivity extends AppCompatActivity {
 
         for (int i = 0; i < days.length; i++) {
             final int index = i;
-            db.collection("users")
-                    .whereEqualTo("id_rt", rt)
-                    .whereEqualTo("jadwal_hari", days[index])
+            db.collection(Constants.COLLECTION_USERS)
+                    .whereEqualTo(Constants.FIELD_ID_RT, rt)
+                    .whereEqualTo(Constants.FIELD_JADWAL_HARI, days[index])
                     .get()
                     .addOnSuccessListener(snap -> {
                         counts[index] = snap.size();
@@ -373,16 +377,16 @@ public class LoginActivity extends AppCompatActivity {
         // They will be assigned when the account is verified by RT
 
         Map<String, Object> user = new HashMap<>();
-        user.put("nama", nama);
-        user.put("telepon", phone);
-        user.put("id_rt", rt);
-        user.put("role", "Warga");
+        user.put(Constants.FIELD_NAMA, nama);
+        user.put(Constants.FIELD_TELEPON, phone);
+        user.put(Constants.FIELD_ID_RT, rt);
+        user.put(Constants.FIELD_ROLE, Constants.ROLE_WARGA);
         // jadwal_hari and jadwal_id intentionally NOT set - will be assigned on
         // verification
-        user.put("status_warga", "pending");
-        user.put("createdAt", com.google.firebase.Timestamp.now());
+        user.put(Constants.FIELD_STATUS_WARGA, Constants.STATUS_PENDING);
+        user.put(Constants.FIELD_CREATED_AT, com.google.firebase.Timestamp.now());
 
-        db.collection("users").document(uid)
+        db.collection(Constants.COLLECTION_USERS).document(uid)
                 .set(user)
                 .addOnSuccessListener(aVoid -> {
                     showLoading(false);
@@ -398,7 +402,8 @@ public class LoginActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     showLoading(false);
-                    Toast.makeText(this, "Gagal simpan data profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_save_profile_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 
@@ -406,36 +411,36 @@ public class LoginActivity extends AppCompatActivity {
      * Cek role user di Firestore saat Login
      */
     private void checkUserRole(String uid) {
-        db.collection("users").document(uid).get()
+        db.collection(Constants.COLLECTION_USERS).document(uid).get()
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
                         DocumentSnapshot document = task.getResult();
                         if (document.exists()) {
                             // User ditemukan di DB
-                            String role = document.getString("role");
-                            String nama = document.getString("nama");
-                            String idRt = document.getString("id_rt");
-                            String jadwalHari = document.getString("jadwal_hari");
-                            String jadwalId = document.getString("jadwal_id");
-                            String statusWarga = document.getString("status_warga");
+                            String role = document.getString(Constants.FIELD_ROLE);
+                            String nama = document.getString(Constants.FIELD_NAMA);
+                            String idRt = document.getString(Constants.FIELD_ID_RT);
+                            String jadwalHari = document.getString(Constants.FIELD_JADWAL_HARI);
+                            String jadwalId = document.getString(Constants.FIELD_JADWAL_ID);
+                            String statusWarga = document.getString(Constants.FIELD_STATUS_WARGA);
 
                             // === CEK STATUS AKUN ===
                             // Hanya role "Warga" yang perlu dicek status, RT dan RW langsung bisa masuk
-                            if ("Warga".equals(role)) {
-                                if (statusWarga == null || "pending".equals(statusWarga)) {
+                            if (Constants.ROLE_WARGA.equals(role)) {
+                                if (statusWarga == null || Constants.STATUS_PENDING.equals(statusWarga)) {
                                     // Akun belum diverifikasi oleh RT
                                     showLoading(false);
                                     mAuth.signOut();
                                     Toast.makeText(this,
-                                            "Akun Anda belum diverifikasi oleh Ketua RT. Silakan tunggu persetujuan.",
+                                            getString(R.string.toast_account_pending),
                                             Toast.LENGTH_LONG).show();
                                     return;
-                                } else if ("rejected".equals(statusWarga)) {
+                                } else if (Constants.STATUS_REJECTED.equals(statusWarga)) {
                                     // Akun ditolak
                                     showLoading(false);
                                     mAuth.signOut();
                                     Toast.makeText(this,
-                                            "Akun Anda telah ditolak. Silakan hubungi Ketua RT.",
+                                            getString(R.string.toast_account_rejected),
                                             Toast.LENGTH_LONG).show();
                                     return;
                                 }
@@ -449,19 +454,20 @@ public class LoginActivity extends AppCompatActivity {
                                 getBalancedDayForRt(idRt, day -> {
                                     Map<String, Object> updates = new HashMap<>();
                                     if (jadwalHari == null || jadwalHari.isEmpty()) {
-                                        updates.put("jadwal_hari", day);
+                                        updates.put(Constants.FIELD_JADWAL_HARI, day);
                                     }
                                     if (jadwalId == null || jadwalId.isEmpty()) {
-                                        updates.put("jadwal_id", generateJadwalId(idRt));
+                                        updates.put(Constants.FIELD_JADWAL_ID, generateJadwalId(idRt));
                                     }
 
-                                    db.collection("users").document(uid)
+                                    db.collection(Constants.COLLECTION_USERS).document(uid)
                                             .update(updates)
                                             .addOnSuccessListener(v -> {
-                                                String newJadwalId = (String) updates.get("jadwal_id");
+                                                String newJadwalId = (String) updates.get(Constants.FIELD_JADWAL_ID);
                                                 if (newJadwalId == null)
                                                     newJadwalId = jadwalId;
-                                                String newJadwalHari = (String) updates.get("jadwal_hari");
+                                                String newJadwalHari = (String) updates
+                                                        .get(Constants.FIELD_JADWAL_HARI);
                                                 if (newJadwalHari == null)
                                                     newJadwalHari = jadwalHari;
                                                 saveSession(uid, role, nama, idRt, newJadwalId, newJadwalHari);
@@ -481,18 +487,18 @@ public class LoginActivity extends AppCompatActivity {
                         } else {
                             showLoading(false);
                             // Kasus langka: Auth ada tapi data Firestore hilang
-                            Toast.makeText(this, "Data profil tidak ditemukan. Hubungi Admin.", Toast.LENGTH_LONG)
+                            Toast.makeText(this, getString(R.string.toast_profile_not_found), Toast.LENGTH_LONG)
                                     .show();
                         }
                     } else {
                         showLoading(false);
-                        Toast.makeText(this, "Gagal mengambil data user (Koneksi/Error)", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_fetch_user_failed), Toast.LENGTH_SHORT).show();
                     }
                 });
     }
 
     private void saveSession(String id, String role, String nama, String idRt, String jadwalId, String jadwalHari) {
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
 
         // Get remember me state:
         // - Jika auto-login, SELALU preserve existing value (jangan pakai checkbox
@@ -501,23 +507,23 @@ public class LoginActivity extends AppCompatActivity {
         boolean rememberMe;
         if (isAutoLogin) {
             // Auto-login flow - preserve existing value, jangan ambil dari checkbox
-            rememberMe = prefs.getBoolean("remember_me", true);
+            rememberMe = prefs.getBoolean(Constants.PREF_KEY_REMEMBER_ME, true);
         } else if (checkRemember != null) {
             // Fresh login - use checkbox value
             rememberMe = checkRemember.isChecked();
         } else {
             // Fallback - preserve existing value
-            rememberMe = prefs.getBoolean("remember_me", true);
+            rememberMe = prefs.getBoolean(Constants.PREF_KEY_REMEMBER_ME, true);
         }
 
         prefs.edit()
-                .putString("id", id)
-                .putString("id_rt", idRt)
-                .putString("nama", nama)
-                .putString("role", role)
-                .putString("jadwal_id", jadwalId)
-                .putString("jadwal_hari", jadwalHari)
-                .putBoolean("remember_me", rememberMe)
+                .putString(Constants.PREF_KEY_ID, id)
+                .putString(Constants.PREF_KEY_ID_RT, idRt)
+                .putString(Constants.PREF_KEY_NAMA, nama)
+                .putString(Constants.PREF_KEY_ROLE, role)
+                .putString(Constants.PREF_KEY_JADWAL_ID, jadwalId)
+                .putString(Constants.PREF_KEY_JADWAL_HARI, jadwalHari)
+                .putBoolean(Constants.PREF_KEY_REMEMBER_ME, rememberMe)
                 .apply();
     }
 
@@ -528,14 +534,14 @@ public class LoginActivity extends AppCompatActivity {
         setupNotifications();
 
         Intent intent;
-        if (role != null && role.equalsIgnoreCase("KetuaRT")) {
+        if (role != null && role.equalsIgnoreCase(Constants.ROLE_KETUA_RT)) {
             intent = new Intent(this, DashboardRtActivity.class);
-        } else if (role != null && role.equalsIgnoreCase("KetuaRW")) {
+        } else if (role != null && role.equalsIgnoreCase(Constants.ROLE_KETUA_RW)) {
             intent = new Intent(this, DashboardRwActivity.class);
         } else {
             intent = new Intent(this, DashboardActivity.class);
         }
-        intent.putExtra("nama_user", namaUser);
+        intent.putExtra(Constants.EXTRA_NAMA_USER, namaUser);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
@@ -568,14 +574,14 @@ public class LoginActivity extends AppCompatActivity {
         // 4. Schedule ronda reminder (hanya untuk Warga)
         String role = PrefUtils.getRole(this);
         String jadwalHari = PrefUtils.getJadwalHari(this);
-        if ("Warga".equals(role) && jadwalHari != null) {
+        if (Constants.ROLE_WARGA.equals(role) && jadwalHari != null) {
             RondaReminderManager.scheduleWeeklyReminder(this, jadwalHari);
             Log.d("Ronda", "Scheduled reminder for: " + jadwalHari);
         }
 
         // 5. Start tukar jadwal listener (hanya untuk Warga)
         String userId = PrefUtils.getIdWarga(this);
-        if ("Warga".equals(role) && userId != null) {
+        if (Constants.ROLE_WARGA.equals(role) && userId != null) {
             TukarJadwalListener.startListening(this, userId);
         }
     }
@@ -610,7 +616,7 @@ public class LoginActivity extends AppCompatActivity {
     // Helper loading sederhana pakai Toast (bisa diganti ProgressDialog)
     private void showLoading(boolean isLoading) {
         if (isLoading) {
-            Toast.makeText(this, "Memproses...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.toast_loading), Toast.LENGTH_SHORT).show();
             btnLogin.setEnabled(false);
             btnRegisterAction.setEnabled(false);
         } else {

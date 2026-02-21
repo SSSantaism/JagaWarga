@@ -19,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -79,10 +80,10 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void loadUserData() {
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        idWarga = prefs.getString("id", null);
-        idRt = prefs.getString("id_rt", null);
-        namaUser = prefs.getString("nama", "Pengguna");
+        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
+        idWarga = prefs.getString(Constants.PREF_KEY_ID, null);
+        idRt = prefs.getString(Constants.PREF_KEY_ID_RT, null);
+        namaUser = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_pengguna));
     }
 
     private void initViews() {
@@ -104,7 +105,7 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void setGreeting() {
-        tvGreeting.setText("Hai, " + namaUser + " !");
+        tvGreeting.setText(getString(R.string.greeting_format, namaUser));
     }
 
     private void setTodayDate() {
@@ -118,9 +119,9 @@ public class DashboardActivity extends AppCompatActivity {
             return;
         menu.setOnClickListener(v -> {
             Intent intent = new Intent(DashboardActivity.this, targetActivity);
-            intent.putExtra("id_rt", idRt);
-            intent.putExtra("id_warga", idWarga);
-            intent.putExtra("nama", namaUser);
+            intent.putExtra(Constants.EXTRA_ID_RT, idRt);
+            intent.putExtra(Constants.EXTRA_ID_WARGA, idWarga);
+            intent.putExtra(Constants.EXTRA_NAMA, namaUser);
             startActivity(intent);
         });
     }
@@ -129,10 +130,10 @@ public class DashboardActivity extends AppCompatActivity {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
                 new AlertDialog.Builder(this)
-                        .setTitle("Konfirmasi Logout")
-                        .setMessage("Apakah Anda yakin ingin keluar?")
-                        .setPositiveButton("Ya, Keluar", (dialog, which) -> {
-                            SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
+                        .setTitle(getString(R.string.dialog_logout_title))
+                        .setMessage(getString(R.string.dialog_logout_message))
+                        .setPositiveButton(getString(R.string.dialog_logout_positive), (dialog, which) -> {
+                            SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
                             prefs.edit().clear().apply();
 
                             FirebaseAuth.getInstance().signOut();
@@ -142,7 +143,7 @@ public class DashboardActivity extends AppCompatActivity {
                             startActivity(intent);
                             finish();
                         })
-                        .setNegativeButton("Batal", null)
+                        .setNegativeButton(getString(R.string.dialog_logout_negative), null)
                         .show();
             });
         }
@@ -156,7 +157,7 @@ public class DashboardActivity extends AppCompatActivity {
 
     private void openWhatsapp() {
         if (currentPosPhone == null || currentPosPhone.isEmpty()) {
-            Toast.makeText(this, "Nomor pos ronda belum tersedia", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.toast_no_whatsapp_number), Toast.LENGTH_SHORT).show();
             return;
         }
         String raw = currentPosPhone.replaceAll("[^0-9]", "");
@@ -173,7 +174,7 @@ public class DashboardActivity extends AppCompatActivity {
                 Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 startActivity(browserIntent);
             } catch (Exception ex) {
-                Toast.makeText(this, "Tidak ada aplikasi WhatsApp", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_no_whatsapp_app), Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -182,20 +183,20 @@ public class DashboardActivity extends AppCompatActivity {
         if (idRt == null || idRt.isEmpty())
             return;
 
-        db.collection("data_rt").document(idRt)
+        db.collection(Constants.COLLECTION_DATA_RT).document(idRt)
                 .get()
                 .addOnSuccessListener(documentSnapshot -> {
                     if (documentSnapshot.exists()) {
-                        currentPosPhone = documentSnapshot.getString("pos_phone");
-                        String lokasi = documentSnapshot.getString("lokasi");
+                        currentPosPhone = documentSnapshot.getString(Constants.FIELD_POS_PHONE);
+                        String lokasi = documentSnapshot.getString(Constants.FIELD_LOKASI);
                         if (currentPosPhone != null)
                             tvContactNumber.setText(currentPosPhone);
                         if (lokasi != null)
                             tvContactLocation.setText(lokasi);
                     } else {
                         // Default dummy data if not set yet
-                        tvContactLocation.setText("Belum diatur");
-                        tvContactNumber.setText("-");
+                        tvContactLocation.setText(getString(R.string.text_belum_diatur));
+                        tvContactNumber.setText(getString(R.string.text_dash));
                     }
                 })
                 .addOnFailureListener(e -> Log.e("FIRESTORE_RT", e.getMessage()));
@@ -203,8 +204,8 @@ public class DashboardActivity extends AppCompatActivity {
 
     // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) - UNIVERSAL UNTUK SEMUA USER ---
     private void loadPengumuman() {
-        db.collection("pengumuman")
-                .orderBy("tanggal", Query.Direction.DESCENDING)
+        db.collection(Constants.COLLECTION_PENGUMUMAN)
+                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
@@ -241,24 +242,26 @@ public class DashboardActivity extends AppCompatActivity {
                 Map<String, Object> item = data.get(position);
 
                 // Format judul: "RT [id_rt] - [judul]"
-                String idRtPengumuman = (String) item.get("id_rt");
-                String judul = (String) item.get("judul");
-                String formattedJudul = "RT " + (idRtPengumuman != null ? idRtPengumuman : "-") + " - "
-                        + (judul != null ? judul : "-");
+                String idRtPengumuman = (String) item.get(Constants.FIELD_ID_RT);
+                String judul = (String) item.get(Constants.FIELD_JUDUL);
+                String formattedJudul = getString(R.string.pengumuman_judul_format,
+                        idRtPengumuman != null ? idRtPengumuman : "-",
+                        judul != null ? judul : "-");
                 holder.tvJudul.setText(formattedJudul);
 
                 // Isi pengumuman
-                String isi = (String) item.get("isi");
-                holder.tvIsi.setText(isi != null ? isi : "-");
+                String isi = (String) item.get(Constants.FIELD_ISI);
+                holder.tvIsi.setText(isi != null ? isi : getString(R.string.text_dash));
 
                 // Format tanggal: "DD MMM" (contoh: "12 Des")
-                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item.get("tanggal");
+                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
+                        .get(Constants.FIELD_TANGGAL);
                 if (timestamp != null) {
                     Date date = timestamp.toDate();
                     SimpleDateFormat sdf = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
                     holder.tvTanggal.setText(sdf.format(date));
                 } else {
-                    holder.tvTanggal.setText("-");
+                    holder.tvTanggal.setText(getString(R.string.text_dash));
                 }
             } catch (Exception e) {
                 e.printStackTrace();

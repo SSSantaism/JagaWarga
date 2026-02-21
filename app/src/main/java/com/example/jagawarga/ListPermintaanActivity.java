@@ -1,7 +1,6 @@
 package com.example.jagawarga;
 
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -13,18 +12,19 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ListPermintaanActivity extends AppCompatActivity {
 
     private LinearLayout containerList;
     private ImageButton btnBack;
     private Button btnTabAbsensi, btnTabRegister;
-    private Button btnTabTukar; // New Tab
 
     private String currentIdRt = "";
     private FirebaseFirestore db;
@@ -39,15 +39,6 @@ public class ListPermintaanActivity extends AppCompatActivity {
         containerList = findViewById(R.id.containerList);
         btnTabAbsensi = findViewById(R.id.btnTabAbsensi);
         btnTabRegister = findViewById(R.id.btnTabRegister);
-        // Assuming layout XML might not have this button yet, I will add it if I edit
-        // XML,
-        // but for now let's just use the existing 2 tabs or repurpose one if needed.
-        // Wait, the plan mentioned "Swap Request" in list permintaan.
-        // I will stick to 2 tabs for now and maybe add swap requests in "Absensi" tab
-        // or a new logic.
-        // Let's keep it simple: 2 tabs. Swap requests can appear in "Register" tab or
-        // "Absensi"?
-        // Actually, let's just implement Register & Absen first as per plan step.
 
         db = FirebaseFirestore.getInstance();
         currentIdRt = PrefUtils.getIdRt(this);
@@ -89,31 +80,28 @@ public class ListPermintaanActivity extends AppCompatActivity {
         containerList.removeAllViews();
     }
 
-    // =================================================================
-    // LOGIC PERMINTAAN REGISTER (Firestore)
-    // =================================================================
+    // === REGISTER PENDING ===
     private void loadPendingRegister(String idRt) {
-        db.collection("users")
-                .whereEqualTo("id_rt", idRt)
-                .whereEqualTo("status_warga", "pending")
+        db.collection(Constants.COLLECTION_USERS)
+                .whereEqualTo(Constants.FIELD_ID_RT, idRt)
+                .whereEqualTo(Constants.FIELD_STATUS_WARGA, Constants.STATUS_PENDING)
                 .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
+                .addOnSuccessListener(snap -> {
                     containerList.removeAllViews();
-                    if (queryDocumentSnapshots.isEmpty()) {
-                        Toast.makeText(this, "Tidak ada register baru", Toast.LENGTH_SHORT).show();
+                    if (snap.isEmpty()) {
+                        Toast.makeText(this, getString(R.string.toast_no_pending_register),
+                                Toast.LENGTH_SHORT).show();
                         return;
                     }
-
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                    for (QueryDocumentSnapshot doc : snap) {
                         String idWarga = doc.getId();
-                        String nama = doc.getString("nama");
-                        String telp = doc.getString("telepon");
-
+                        String nama = doc.getString(Constants.FIELD_NAMA);
+                        String telp = doc.getString(Constants.FIELD_TELEPON);
                         addItemRegister(idWarga, nama, telp, idRt);
                     }
                 })
-                .addOnFailureListener(
-                        e -> Toast.makeText(this, "Gagal memuat: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> Toast.makeText(this, getString(R.string.toast_load_failed, e.getMessage()),
+                        Toast.LENGTH_SHORT).show());
     }
 
     private void addItemRegister(String idWarga, String nama, String telp, String idRt) {
@@ -128,39 +116,38 @@ public class ListPermintaanActivity extends AppCompatActivity {
         tvTelp.setText(telp);
 
         btnAcc.setOnClickListener(v -> {
-            // When approving, assign jadwal_hari and jadwal_id
             btnAcc.setEnabled(false);
             btnReject.setEnabled(false);
-
             getBalancedDayForRt(idRt, balancedDay -> {
                 String jadwalId = generateJadwalId(idRt);
-
                 Map<String, Object> updates = new HashMap<>();
-                updates.put("status_warga", "verified");
-                updates.put("jadwal_hari", balancedDay);
-                updates.put("jadwal_id", jadwalId);
+                updates.put(Constants.FIELD_STATUS_WARGA, Constants.STATUS_VERIFIED);
+                updates.put(Constants.FIELD_JADWAL_HARI, balancedDay);
+                updates.put(Constants.FIELD_JADWAL_ID, jadwalId);
 
-                db.collection("users").document(idWarga)
+                db.collection(Constants.COLLECTION_USERS).document(idWarga)
                         .update(updates)
                         .addOnSuccessListener(aVoid -> {
-                            Toast.makeText(this, "Warga diterima dan jadwal telah diassign (" + balancedDay + ")",
+                            Toast.makeText(this,
+                                    getString(R.string.toast_warga_accepted, balancedDay),
                                     Toast.LENGTH_SHORT).show();
                             containerList.removeView(itemView);
                         })
                         .addOnFailureListener(e -> {
                             btnAcc.setEnabled(true);
                             btnReject.setEnabled(true);
-                            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this, getString(R.string.toast_error_generic, e.getMessage()),
+                                    Toast.LENGTH_SHORT).show();
                         });
             });
         });
 
         btnReject.setOnClickListener(v -> {
-            // Delete user or set status rejected
-            db.collection("users").document(idWarga)
-                    .delete() // Simple rejection: delete the doc (User must register again)
+            db.collection(Constants.COLLECTION_USERS).document(idWarga)
+                    .delete()
                     .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, "Warga ditolak", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_warga_rejected),
+                                Toast.LENGTH_SHORT).show();
                         containerList.removeView(itemView);
                     });
         });
@@ -168,9 +155,6 @@ public class ListPermintaanActivity extends AppCompatActivity {
         containerList.addView(itemView);
     }
 
-    /**
-     * Generate unique jadwal ID in format: JDW-{RT}-{6 random alphanumeric chars}
-     */
     private String generateJadwalId(String rt) {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         StringBuilder randomPart = new StringBuilder();
@@ -181,77 +165,60 @@ public class ListPermintaanActivity extends AppCompatActivity {
         return "JDW-" + rt + "-" + randomPart.toString();
     }
 
-    /**
-     * Callback interface for balanced day assignment
-     */
     private interface OnBalancedDayCallback {
         void onResult(String day);
     }
 
-    /**
-     * Get day with least users for a specific RT (balanced assignment)
-     */
     private void getBalancedDayForRt(String rt, OnBalancedDayCallback callback) {
         String[] days = { "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu" };
         int[] counts = new int[7];
-        java.util.concurrent.atomic.AtomicInteger completedQueries = new java.util.concurrent.atomic.AtomicInteger(0);
-
+        AtomicInteger completed = new AtomicInteger(0);
         for (int i = 0; i < days.length; i++) {
-            final int index = i;
-            db.collection("users")
-                    .whereEqualTo("id_rt", rt)
-                    .whereEqualTo("jadwal_hari", days[index])
+            final int idx = i;
+            db.collection(Constants.COLLECTION_USERS)
+                    .whereEqualTo(Constants.FIELD_ID_RT, rt)
+                    .whereEqualTo(Constants.FIELD_JADWAL_HARI, days[idx])
                     .get()
-                    .addOnSuccessListener(snap -> {
-                        counts[index] = snap.size();
-                        if (completedQueries.incrementAndGet() == 7) {
-                            // Find day with minimum count
-                            int minIndex = 0;
-                            for (int j = 1; j < 7; j++) {
-                                if (counts[j] < counts[minIndex])
-                                    minIndex = j;
-                            }
-                            callback.onResult(days[minIndex]);
+                    .addOnSuccessListener(s -> {
+                        counts[idx] = s.size();
+                        if (completed.incrementAndGet() == 7) {
+                            int min = 0;
+                            for (int j = 1; j < 7; j++)
+                                if (counts[j] < counts[min])
+                                    min = j;
+                            callback.onResult(days[min]);
                         }
                     })
                     .addOnFailureListener(e -> {
-                        // Fallback to random if query fails
-                        if (completedQueries.incrementAndGet() == 7) {
+                        if (completed.incrementAndGet() == 7)
                             callback.onResult(days[(int) (Math.random() * days.length)]);
-                        }
                     });
         }
     }
 
-    // =================================================================
-    // LOGIC PERMINTAAN ABSENSI (Firestore)
-    // =================================================================
+    // === ABSEN PENDING ===
     private void loadPendingAbsen(String idRt) {
-        db.collection("absensi")
-                .whereEqualTo("id_rt", idRt)
-                .whereEqualTo("status", "pending")
+        db.collection(Constants.COLLECTION_ABSENSI)
+                .whereEqualTo(Constants.FIELD_ID_RT, idRt)
+                .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_PENDING)
                 .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
+                .addOnSuccessListener(snap -> {
                     containerList.removeAllViews();
-                    if (queryDocumentSnapshots.isEmpty()) {
-                        Toast.makeText(this, "Tidak ada absen pending", Toast.LENGTH_SHORT).show();
+                    if (snap.isEmpty()) {
+                        Toast.makeText(this, getString(R.string.toast_no_pending_absen),
+                                Toast.LENGTH_SHORT).show();
                         return;
                     }
-
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                    for (QueryDocumentSnapshot doc : snap) {
                         String idAbsen = doc.getId();
-                        String nama = doc.getString("nama");
-                        // Convert Timestamp to readable time if needed, or string
-                        Object waktuObj = doc.get("waktu");
+                        String nama = doc.getString(Constants.FIELD_NAMA);
+                        Object waktuObj = doc.get(Constants.FIELD_WAKTU);
                         String waktuStr = waktuObj != null ? waktuObj.toString() : "-";
-
-                        // If it's a Timestamp, formatting would be better, but for now toString()
-
                         addItemAbsen(idAbsen, nama, waktuStr);
                     }
                 })
-                .addOnFailureListener(
-                        e -> Toast.makeText(this, "Gagal memuat: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> Toast.makeText(this, getString(R.string.toast_load_failed, e.getMessage()),
+                        Toast.LENGTH_SHORT).show());
     }
 
     private void addItemAbsen(String idAbsen, String nama, String waktu) {
@@ -263,22 +230,24 @@ public class ListPermintaanActivity extends AppCompatActivity {
         Button btnReject = itemView.findViewById(R.id.btnRejectAbsen);
 
         tvNama.setText(nama);
-        tvWaktu.setText("Pukul: " + waktu);
+        tvWaktu.setText(getString(R.string.label_pukul_format, waktu));
 
         btnAcc.setOnClickListener(v -> {
-            db.collection("absensi").document(idAbsen)
-                    .update("status", "verified")
+            db.collection(Constants.COLLECTION_ABSENSI).document(idAbsen)
+                    .update(Constants.FIELD_STATUS, Constants.STATUS_VERIFIED)
                     .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, "Absen diterima", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_absen_accepted),
+                                Toast.LENGTH_SHORT).show();
                         containerList.removeView(itemView);
                     });
         });
 
         btnReject.setOnClickListener(v -> {
-            db.collection("absensi").document(idAbsen)
-                    .update("status", "rejected")
+            db.collection(Constants.COLLECTION_ABSENSI).document(idAbsen)
+                    .update(Constants.FIELD_STATUS, Constants.STATUS_REJECTED)
                     .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, "Absen ditolak", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, getString(R.string.toast_absen_rejected),
+                                Toast.LENGTH_SHORT).show();
                         containerList.removeView(itemView);
                     });
         });

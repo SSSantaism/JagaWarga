@@ -11,6 +11,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -25,13 +26,6 @@ public class AbsenRondaActivity extends AppCompatActivity {
 
     private ImageButton btnBackAbsen;
     private Button btnKirimAbsen;
-    // EditText insert_absenID; // No longer needed if we check day automatically,
-    // but let's keep it as "Code" or remove logic?
-    // Plan said: "Check: Is today == User's jadwal_hari?"
-    // If we rely on automatic check, we don't need ID Jadwal input.
-    // However, the UI might still have it. I should probably ignore it or use it as
-    // "Notes".
-    // Let's hide or ignore the ID input for now and focus on day verification.
     private EditText insert_absenID;
 
     private TextView textTanggalAbsen;
@@ -53,7 +47,8 @@ public class AbsenRondaActivity extends AppCompatActivity {
             // SECURITY: Ambil ID Warga dari session login
             String idWarga = PrefUtils.getIdWarga(this);
             String idRt = PrefUtils.getIdRt(this);
-            String nama = getSharedPreferences("user_data", MODE_PRIVATE).getString("nama", "Warga");
+            String nama = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE)
+                    .getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_warga));
 
             if (idWarga != null && idRt != null) {
                 kirimAbsen(idWarga, idRt, nama);
@@ -74,7 +69,7 @@ public class AbsenRondaActivity extends AppCompatActivity {
             insert_absenID.setEnabled(false); // Read-only
             insert_absenID.setFocusable(false);
         } else {
-            insert_absenID.setHint("ID Jadwal tidak ditemukan");
+            insert_absenID.setHint(getString(R.string.hint_jadwal_not_found));
             insert_absenID.setEnabled(false);
         }
     }
@@ -88,7 +83,7 @@ public class AbsenRondaActivity extends AppCompatActivity {
     // --- LOGIC KIRIM ABSEN DENGAN VERIFIKASI USER ---
     private void kirimAbsen(String idWarga, String idRt, String nama) {
         ProgressDialog loading = new ProgressDialog(this);
-        loading.setMessage("Memverifikasi jadwal...");
+        loading.setMessage(getString(R.string.toast_absen_verifying));
         loading.setCancelable(false);
         loading.show();
 
@@ -96,9 +91,9 @@ public class AbsenRondaActivity extends AppCompatActivity {
         Calendar calendar = Calendar.getInstance();
         String hariIni = new SimpleDateFormat("EEEE", new Locale("id", "ID")).format(calendar.getTime());
 
-        db.collection("users").document(idWarga).get()
+        db.collection(Constants.COLLECTION_USERS).document(idWarga).get()
                 .addOnSuccessListener(documentSnapshot -> {
-                    String jadwalHari = documentSnapshot.getString("jadwal_hari");
+                    String jadwalHari = documentSnapshot.getString(Constants.FIELD_JADWAL_HARI);
 
                     if (jadwalHari != null && jadwalHari.equalsIgnoreCase(hariIni)) {
                         // Correct Day -> Submit Absen
@@ -106,13 +101,14 @@ public class AbsenRondaActivity extends AppCompatActivity {
                     } else {
                         loading.dismiss();
                         Toast.makeText(this,
-                                "Maaf, hari ini (" + hariIni + ") bukan jadwal ronda Anda (" + jadwalHari + ").",
+                                getString(R.string.toast_absen_wrong_day, hariIni, jadwalHari),
                                 Toast.LENGTH_LONG).show();
                     }
                 })
                 .addOnFailureListener(e -> {
                     loading.dismiss();
-                    Toast.makeText(this, "Gagal verifikasi profil: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_verify_profile_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 
@@ -121,23 +117,24 @@ public class AbsenRondaActivity extends AppCompatActivity {
         String waktuStr = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date());
 
         Map<String, Object> absenData = new HashMap<>();
-        absenData.put("id_warga", idWarga);
-        absenData.put("nama", nama); // Store name to avoid extra queries later
-        absenData.put("id_rt", idRt);
-        absenData.put("tanggal", Timestamp.now());
-        absenData.put("waktu", waktuStr);
-        absenData.put("catatan", catatan);
-        absenData.put("status", "pending");
+        absenData.put(Constants.FIELD_ID_WARGA, idWarga);
+        absenData.put(Constants.FIELD_NAMA, nama);
+        absenData.put(Constants.FIELD_ID_RT, idRt);
+        absenData.put(Constants.FIELD_TANGGAL, Timestamp.now());
+        absenData.put(Constants.FIELD_WAKTU, waktuStr);
+        absenData.put(Constants.FIELD_CATATAN, catatan);
+        absenData.put(Constants.FIELD_STATUS, Constants.STATUS_PENDING);
 
-        db.collection("absensi").add(absenData)
+        db.collection(Constants.COLLECTION_ABSENSI).add(absenData)
                 .addOnSuccessListener(documentReference -> {
                     loading.dismiss();
-                    Toast.makeText(this, "Absen berhasil dikirim! Menunggu validasi RT.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, getString(R.string.toast_absen_success), Toast.LENGTH_LONG).show();
                     finish();
                 })
                 .addOnFailureListener(e -> {
                     loading.dismiss();
-                    Toast.makeText(this, "Gagal kirim absen: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.toast_absen_failed, e.getMessage()),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 }

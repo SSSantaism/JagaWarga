@@ -35,25 +35,25 @@ public class NotificationHelper {
             // Channel untuk Pengumuman
             NotificationChannel channelPengumuman = new NotificationChannel(
                     CHANNEL_PENGUMUMAN,
-                    "Pengumuman RT/RW",
+                    context.getString(R.string.notif_channel_pengumuman),
                     NotificationManager.IMPORTANCE_HIGH);
-            channelPengumuman.setDescription("Notifikasi pengumuman dari Ketua RT/RW");
+            channelPengumuman.setDescription(context.getString(R.string.notif_channel_pengumuman_desc));
             manager.createNotificationChannel(channelPengumuman);
 
             // Channel untuk Jadwal Ronda
             NotificationChannel channelJadwal = new NotificationChannel(
                     CHANNEL_JADWAL,
-                    "Pengingat Jadwal Ronda",
+                    context.getString(R.string.notif_channel_jadwal),
                     NotificationManager.IMPORTANCE_HIGH);
-            channelJadwal.setDescription("Pengingat jadwal ronda malam ini");
+            channelJadwal.setDescription(context.getString(R.string.notif_channel_jadwal_desc));
             manager.createNotificationChannel(channelJadwal);
 
             // Channel untuk Tukar Jadwal
             NotificationChannel channelTukar = new NotificationChannel(
                     CHANNEL_TUKAR,
-                    "Permintaan Tukar Jadwal",
+                    context.getString(R.string.notif_channel_tukar),
                     NotificationManager.IMPORTANCE_DEFAULT);
-            channelTukar.setDescription("Notifikasi permintaan tukar jadwal dari warga lain");
+            channelTukar.setDescription(context.getString(R.string.notif_channel_tukar_desc));
             manager.createNotificationChannel(channelTukar);
         }
     }
@@ -70,7 +70,7 @@ public class NotificationHelper {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_PENGUMUMAN)
                 .setSmallIcon(R.drawable.jjagawarga_icon)
-                .setContentTitle("📢 " + judul)
+                .setContentTitle(context.getString(R.string.notif_title_pengumuman_format, judul))
                 .setContentText(isi)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(isi))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -98,8 +98,8 @@ public class NotificationHelper {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_JADWAL)
                 .setSmallIcon(R.drawable.jjagawarga_icon)
-                .setContentTitle("🌙 Jadwal Ronda Malam Ini")
-                .setContentText("Jangan lupa, malam ini adalah jadwal ronda Anda!")
+                .setContentTitle(context.getString(R.string.notif_title_jadwal_ronda))
+                .setContentText(context.getString(R.string.notif_body_jadwal_ronda))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true);
@@ -149,19 +149,19 @@ public class NotificationHelper {
                 context, notifId + 2, rejectIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        String message = dariNama + " ingin bertukar jadwal dengan Anda untuk hari " + hariTukar;
+        String message = context.getString(R.string.notif_body_tukar_jadwal, dariNama, hariTukar);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_TUKAR)
                 .setSmallIcon(R.drawable.jjagawarga_icon)
-                .setContentTitle("🔄 Permintaan Tukar Jadwal")
+                .setContentTitle(context.getString(R.string.notif_title_tukar_jadwal))
                 .setContentText(message)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
                 .setPriority(NotificationCompat.PRIORITY_HIGH) // Tingkatkan priority untuk action buttons
                 .setContentIntent(tapPendingIntent)
                 .setAutoCancel(true)
                 // Tambahkan action buttons
-                .addAction(R.drawable.ic_check, "✅ Setuju", acceptPendingIntent)
-                .addAction(R.drawable.ic_close, "❌ Tolak", rejectPendingIntent);
+                .addAction(R.drawable.ic_check, context.getString(R.string.notif_action_accept), acceptPendingIntent)
+                .addAction(R.drawable.ic_close, context.getString(R.string.notif_action_reject), rejectPendingIntent);
 
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
         try {

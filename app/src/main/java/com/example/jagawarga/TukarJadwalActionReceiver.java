@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.example.jagawarga.utils.Constants;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -59,23 +60,23 @@ public class TukarJadwalActionReceiver extends BroadcastReceiver {
     private void handleAccept(Context context, FirebaseFirestore db, String docId) {
         Log.d(TAG, "Accepting swap request: " + docId);
 
-        db.collection("tukar_jadwal").document(docId)
+        db.collection(Constants.COLLECTION_TUKAR_JADWAL).document(docId)
                 .get()
                 .addOnSuccessListener(document -> {
                     if (!document.exists()) {
-                        showToast(context, "Permintaan tidak ditemukan");
+                        showToast(context, context.getString(R.string.toast_swap_request_not_found));
                         return;
                     }
 
-                    String dariId = document.getString("dari_id");
-                    String kepadaId = document.getString("kepada_id");
-                    String hariDari = document.getString("hari_dari");
-                    String hariKepada = document.getString("hari_kepada");
-                    String jadwalIdDari = document.getString("dari_jadwal_id");
-                    String jadwalIdKepada = document.getString("kepada_jadwal_id");
+                    String dariId = document.getString(Constants.FIELD_DARI_ID);
+                    String kepadaId = document.getString(Constants.FIELD_KEPADA_ID);
+                    String hariDari = document.getString(Constants.FIELD_HARI_DARI);
+                    String hariKepada = document.getString(Constants.FIELD_HARI_KEPADA);
+                    String jadwalIdDari = document.getString(Constants.FIELD_DARI_JADWAL_ID);
+                    String jadwalIdKepada = document.getString(Constants.FIELD_KEPADA_JADWAL_ID);
 
                     if (dariId == null || kepadaId == null) {
-                        showToast(context, "Data tidak lengkap");
+                        showToast(context, context.getString(R.string.toast_swap_data_incomplete));
                         return;
                     }
 
@@ -87,7 +88,7 @@ public class TukarJadwalActionReceiver extends BroadcastReceiver {
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error getting swap document: " + e.getMessage());
-                    showToast(context, "Gagal memproses: " + e.getMessage());
+                    showToast(context, context.getString(R.string.toast_swap_process_failed, e.getMessage()));
                 });
     }
 
@@ -101,27 +102,28 @@ public class TukarJadwalActionReceiver extends BroadcastReceiver {
 
         // Update user "dari" dengan jadwal "kepada"
         Map<String, Object> updateDari = new HashMap<>();
-        updateDari.put("jadwal_hari", hariKepada);
-        updateDari.put("jadwal_id", jadwalIdKepada);
+        updateDari.put(Constants.FIELD_JADWAL_HARI, hariKepada);
+        updateDari.put(Constants.FIELD_JADWAL_ID, jadwalIdKepada);
 
         // Update user "kepada" dengan jadwal "dari"
         Map<String, Object> updateKepada = new HashMap<>();
-        updateKepada.put("jadwal_hari", hariDari);
-        updateKepada.put("jadwal_id", jadwalIdDari);
+        updateKepada.put(Constants.FIELD_JADWAL_HARI, hariDari);
+        updateKepada.put(Constants.FIELD_JADWAL_ID, jadwalIdDari);
 
         // Batch update
         db.runTransaction(transaction -> {
             // Update kedua user
-            transaction.update(db.collection("users").document(dariId), updateDari);
-            transaction.update(db.collection("users").document(kepadaId), updateKepada);
+            transaction.update(db.collection(Constants.COLLECTION_USERS).document(dariId), updateDari);
+            transaction.update(db.collection(Constants.COLLECTION_USERS).document(kepadaId), updateKepada);
 
             // Update status permintaan
-            transaction.update(db.collection("tukar_jadwal").document(docId), "status", "accepted");
+            transaction.update(db.collection(Constants.COLLECTION_TUKAR_JADWAL).document(docId),
+                    Constants.FIELD_STATUS, Constants.STATUS_ACCEPTED);
 
             return null;
         }).addOnSuccessListener(aVoid -> {
             Log.d(TAG, "Swap completed successfully");
-            showToast(context, "✅ Jadwal berhasil ditukar!");
+            showToast(context, context.getString(R.string.toast_swap_success));
 
             // Update local session jika user yang accept adalah current user
             String currentUserId = PrefUtils.getIdWarga(context);
@@ -132,7 +134,7 @@ public class TukarJadwalActionReceiver extends BroadcastReceiver {
             }
         }).addOnFailureListener(e -> {
             Log.e(TAG, "Swap failed: " + e.getMessage());
-            showToast(context, "Gagal menukar jadwal: " + e.getMessage());
+            showToast(context, context.getString(R.string.toast_swap_failed, e.getMessage()));
         });
     }
 
@@ -142,15 +144,15 @@ public class TukarJadwalActionReceiver extends BroadcastReceiver {
     private void handleReject(Context context, FirebaseFirestore db, String docId) {
         Log.d(TAG, "Rejecting swap request: " + docId);
 
-        db.collection("tukar_jadwal").document(docId)
-                .update("status", "rejected")
+        db.collection(Constants.COLLECTION_TUKAR_JADWAL).document(docId)
+                .update(Constants.FIELD_STATUS, Constants.STATUS_REJECTED)
                 .addOnSuccessListener(aVoid -> {
                     Log.d(TAG, "Swap request rejected");
-                    showToast(context, "❌ Permintaan tukar jadwal ditolak");
+                    showToast(context, context.getString(R.string.toast_swap_rejected));
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error rejecting: " + e.getMessage());
-                    showToast(context, "Gagal: " + e.getMessage());
+                    showToast(context, context.getString(R.string.toast_generic_failed, e.getMessage()));
                 });
     }
 

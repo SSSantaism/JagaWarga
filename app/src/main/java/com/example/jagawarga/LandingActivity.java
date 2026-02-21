@@ -7,6 +7,8 @@ import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.utils.Constants;
+
 public class LandingActivity extends AppCompatActivity {
 
     @Override
@@ -31,10 +33,10 @@ public class LandingActivity extends AppCompatActivity {
     }
 
     private boolean checkSession() {
-        SharedPreferences prefs = getSharedPreferences("user_data", MODE_PRIVATE);
-        String savedId = prefs.getString("id", null);
-        String savedRole = prefs.getString("role", null);
-        String savedNama = prefs.getString("nama", "User");
+        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
+        String savedId = prefs.getString(Constants.PREF_KEY_ID, null);
+        String savedRole = prefs.getString(Constants.PREF_KEY_ROLE, null);
+        String savedNama = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_user));
 
         if (savedId != null && savedRole != null) {
             redirectDashboard(savedRole, savedNama);
@@ -46,15 +48,15 @@ public class LandingActivity extends AppCompatActivity {
     private void redirectDashboard(String role, String namaUser) {
         Intent intent;
 
-        if (role.equalsIgnoreCase("KetuaRT")) {
+        if (role.equalsIgnoreCase(Constants.ROLE_KETUA_RT)) {
             intent = new Intent(this, DashboardRtActivity.class);
-        } else if (role.equalsIgnoreCase("KetuaRW")) {
+        } else if (role.equalsIgnoreCase(Constants.ROLE_KETUA_RW)) {
             intent = new Intent(this, DashboardRwActivity.class);
         } else {
             intent = new Intent(this, DashboardActivity.class);
         }
 
-        intent.putExtra("nama_user", namaUser);
+        intent.putExtra(Constants.EXTRA_NAMA_USER, namaUser);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
