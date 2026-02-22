@@ -22,7 +22,7 @@
 
 
         <activity
-            android:name=".LoginActivity"
+            android:name=".ui.activities.LoginActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar">
@@ -35,63 +35,63 @@
         </activity>
 
         <activity
-            android:name=".DashboardActivity">
+            android:name=".ui.activities.DashboardActivity">
         </activity>
 
         <activity
-            android:name=".DashboardRtActivity">
+            android:name=".ui.activities.DashboardRtActivity">
         </activity>
 
         <activity
-            android:name=".ListPermintaanActivity">
+            android:name=".ui.activities.ListPermintaanActivity">
         </activity>
 
         <activity
-            android:name=".DashboardRwActivity">
+            android:name=".ui.activities.DashboardRwActivity">
         </activity>
 
         <activity
-            android:name=".ResetPasswordActivity">
+            android:name=".ui.activities.ResetPasswordActivity">
         </activity>
 
         <activity
-            android:name=".PendingRegisterActivity">
-        </activity>
-
-
-        <activity
-            android:name=".TukarJadwalActivity">
-        </activity>
-
-        <activity
-            android:name=".JadwalRondaActivity">
-        </activity>
-
-        <activity
-            android:name=".AbsenRondaActivity">
-        </activity>
-
-        <activity
-            android:name=".LaporanKeamananActivity">
-        </activity>
-
-
-
-        <activity
-            android:name=".BuatPengumumanActivity">
-        </activity>
-
-        <activity
-            android:name=".TerimaLaporanActivity">
+            android:name=".ui.activities.PendingRegisterActivity">
         </activity>
 
 
         <activity
-            android:name=".AturRtPromoteActivity">
+            android:name=".ui.activities.TukarJadwalActivity">
         </activity>
 
         <activity
-            android:name=".AturRtRevokeActivity">
+            android:name=".ui.activities.JadwalRondaActivity">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.AbsenRondaActivity">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LaporanKeamananActivity">
+        </activity>
+
+
+
+        <activity
+            android:name=".ui.activities.BuatPengumumanActivity">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.TerimaLaporanActivity">
+        </activity>
+
+
+        <activity
+            android:name=".ui.activities.AturRtPromoteActivity">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.AturRtRevokeActivity">
         </activity>
 
         <!-- Firebase Cloud Messaging Service -->

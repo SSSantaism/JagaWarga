@@ -1,5 +1,7 @@
 package com.example.jagawarga;
 
+import com.example.jagawarga.ui.activities.DashboardActivity;
+import com.example.jagawarga.ui.activities.JadwalRondaActivity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;

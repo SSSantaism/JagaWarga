@@ -1,4 +1,11 @@
-package com.example.jagawarga;
+package com.example.jagawarga.ui.activities;
+
+import com.example.jagawarga.R;
+import com.example.jagawarga.PrefUtils;
+import com.example.jagawarga.NotificationHelper;
+import com.example.jagawarga.RondaReminderManager;
+import com.example.jagawarga.TukarJadwalListener;
+import com.example.jagawarga.BootReceiver;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -8,10 +15,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -32,123 +37,68 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class DashboardRwActivity extends AppCompatActivity {
+public class DashboardRtActivity extends AppCompatActivity {
 
-    // HEADER
-    private TextView tvGreeting, tvSubGreeting, tvTanggalCurrent;
+    // Menu utama
+    private LinearLayout menuTerimaLaporan;
+    private LinearLayout menuListPermintaan;
+    private LinearLayout menuBuatPengumuman;
     private FrameLayout profileContainer;
-    private ImageView imgProfile;
-
-    // MENU CARD (di dalam cardToday)
-    private LinearLayout menuKelolaKetuaRT; // id: menuTerimaLaporan
-    private LinearLayout menuBuatPengumuman; // id: menuBuatPengumuman
-
-    // Pengumuman
     private RecyclerView rvPengumuman;
     private FirebaseFirestore db;
-
-    // DATA USER RW (ambil dari SharedPreferences)
-    private String idRw;
-    private String namaRw;
-    private String idRtRw; // kalau RW punya RT khusus atau bisa kosong
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_dashboard_rw);
+        setContentView(R.layout.activity_dashboard_rt);
 
         db = FirebaseFirestore.getInstance();
 
-        loadUserData();
-        initViews();
-        setGreeting();
-        setTodayDate();
-        setupMenuClick();
-        setupLogout();
-        loadPengumuman();
-    }
-
-    // =======================================
-    // LOAD DATA USER RW DARI SHAREDPREF
-    // =======================================
-    private void loadUserData() {
-        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-
-        idRw = prefs.getString(Constants.PREF_KEY_ID, null);
-        namaRw = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_pak_rw));
-        idRtRw = prefs.getString(Constants.PREF_KEY_ID_RT, null); // optional, kalau mau dipakai
-
-        if (idRw == null) {
-            Toast.makeText(this, getString(R.string.toast_rw_data_not_found), Toast.LENGTH_SHORT).show();
+        // ====== 1. Greeting nama RT ======
+        String namaRt = getIntent().getStringExtra(Constants.EXTRA_NAMA_USER);
+        if (namaRt == null || namaRt.trim().isEmpty()) {
+            namaRt = getString(R.string.fallback_name_pak_rt);
         }
-    }
 
-    // =======================================
-    // INIT VIEW
-    // =======================================
-    private void initViews() {
-        tvGreeting = findViewById(R.id.tvGreeting);
-        tvSubGreeting = findViewById(R.id.tvSubGreeting);
-        tvTanggalCurrent = findViewById(R.id.tanggal_current);
+        TextView tvGreetingRt = findViewById(R.id.tvGreetingRt);
+        tvGreetingRt.setText(getString(R.string.greeting_format, namaRt));
 
-        profileContainer = findViewById(R.id.profileContainer);
-        imgProfile = findViewById(R.id.imgProfile);
+        // ====== 2. Set tanggal hari ini ======
+        TextView tvTanggalRt = findViewById(R.id.tvTanggalRt);
+        Calendar calendar = Calendar.getInstance();
+        SimpleDateFormat sdf = new SimpleDateFormat("EEEE, d MMMM yyyy", new Locale("id", "ID"));
+        String tanggal = sdf.format(calendar.getTime());
+        tvTanggalRt.setText(tanggal);
 
-        // menu di dalam cardToday
-        menuKelolaKetuaRT = findViewById(R.id.menuTerimaLaporan); // teks: "Kelola Ketua RT"
-        menuBuatPengumuman = findViewById(R.id.menuBuatPengumuman); // teks: "Buat Pengumuman"
+        // ====== 3. Inisialisasi menu ======
+        menuTerimaLaporan = findViewById(R.id.menuTerimaLaporan);
+        menuListPermintaan = findViewById(R.id.menuListPermintaan);
+        menuBuatPengumuman = findViewById(R.id.menuBuatPengumuman);
 
-        // Pengumuman RecyclerView
+        // ====== 4. Setup RecyclerView Pengumuman ======
         rvPengumuman = findViewById(R.id.rvPengumuman);
         rvPengumuman.setLayoutManager(new LinearLayoutManager(this));
-    }
+        loadPengumuman();
 
-    private void setGreeting() {
-        // contoh: "Hai, Pak RW Budi !"
-        tvGreeting.setText(getString(R.string.greeting_format, namaRw));
-        tvSubGreeting.setText(getString(R.string.sub_greeting_ronda));
-    }
+        // ====== 5. Setup Listener (Navigasi) ======
 
-    private void setTodayDate() {
-        Calendar cal = Calendar.getInstance();
-        SimpleDateFormat sdf = new SimpleDateFormat("EEEE, d MMMM yyyy", new Locale("id", "ID"));
-        String today = sdf.format(cal.getTime());
-        tvTanggalCurrent.setText(today);
-    }
+        menuTerimaLaporan.setOnClickListener(v -> {
+            startActivity(new Intent(DashboardRtActivity.this, TerimaLaporanActivity.class));
+        });
 
-    // =======================================
-    // CLICK MENU
-    // =======================================
-    private void setupMenuClick() {
-        // MENU: Kelola Ketua RT -> AturRtActivity
-        if (menuKelolaKetuaRT != null) {
-            menuKelolaKetuaRT.setOnClickListener(v -> {
-                Intent intent = new Intent(DashboardRwActivity.this, AturRtPromoteActivity.class);
+        menuBuatPengumuman.setOnClickListener(v -> {
+            // Arahkan ke halaman Buat Pengumuman
+            Intent intent = new Intent(DashboardRtActivity.this, BuatPengumumanActivity.class);
+            startActivity(intent);
+        });
 
-                // kalau mau kirim data RW ke halaman Atur RT:
-                intent.putExtra(Constants.EXTRA_ID_RW, idRw);
-                intent.putExtra(Constants.EXTRA_NAMA_RW, namaRw);
-                intent.putExtra(Constants.EXTRA_ID_RT_RW, idRtRw);
+        menuListPermintaan.setOnClickListener(v -> {
+            // Mengarahkan ke ListPermintaan (activity_list_permintaan_register.xml)
+            startActivity(new Intent(this, ListPermintaanActivity.class));
+        });
 
-                startActivity(intent);
-            });
-        }
-
-        // MENU: Buat Pengumuman -> BuatPengumumanActivity
-        if (menuBuatPengumuman != null) {
-            menuBuatPengumuman.setOnClickListener(v -> {
-                Intent intent = new Intent(DashboardRwActivity.this, BuatPengumumanActivity.class);
-                // bisa juga kirim nama RW / id RW jika perlu
-                intent.putExtra(Constants.EXTRA_ID_RW, idRw);
-                startActivity(intent);
-            });
-        }
-    }
-
-    // =======================================
-    // LOGOUT
-    // =======================================
-    private void setupLogout() {
+        // ====== 6. Setup Logout ======
+        profileContainer = findViewById(R.id.profileContainer);
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
                 new AlertDialog.Builder(this)
@@ -160,7 +110,7 @@ public class DashboardRwActivity extends AppCompatActivity {
 
                             FirebaseAuth.getInstance().signOut();
 
-                            Intent intent = new Intent(DashboardRwActivity.this, LoginActivity.class);
+                            Intent intent = new Intent(DashboardRtActivity.this, LoginActivity.class);
                             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                             startActivity(intent);
                             finish();
@@ -171,9 +121,7 @@ public class DashboardRwActivity extends AppCompatActivity {
         }
     }
 
-    // =======================================
-    // LOAD PENGUMUMAN (UNIVERSAL)
-    // =======================================
+    // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) - UNIVERSAL UNTUK SEMUA USER ---
     private void loadPengumuman() {
         db.collection(Constants.COLLECTION_PENGUMUMAN)
                 .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
