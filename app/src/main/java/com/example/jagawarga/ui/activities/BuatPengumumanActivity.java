@@ -1,11 +1,6 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.app.ProgressDialog;
 import android.os.Bundle;
@@ -16,26 +11,26 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.jagawarga.utils.Constants;
-import com.google.firebase.Timestamp;
-import com.google.firebase.firestore.FirebaseFirestore;
-
-import java.util.HashMap;
-import java.util.Map;
+import com.example.jagawarga.data.repository.AdminRepository;
+import com.example.jagawarga.data.repository.SessionManager;
 
 public class BuatPengumumanActivity extends AppCompatActivity {
 
     private EditText inputJudul, inputIsi;
     private Button btnSubmit;
     private ImageButton btnBack;
-    private FirebaseFirestore db;
+
+    // MVVM
+    private AdminRepository adminRepository;
+    private SessionManager sessionManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_buat_pengumuman);
 
-        db = FirebaseFirestore.getInstance();
+        adminRepository = new AdminRepository();
+        sessionManager = new SessionManager(this);
 
         inputJudul = findViewById(R.id.inputJudul);
         inputIsi = findViewById(R.id.inputIsi);
@@ -53,7 +48,7 @@ public class BuatPengumumanActivity extends AppCompatActivity {
                 return;
             }
 
-            String idRt = PrefUtils.getIdRt(this);
+            String idRt = sessionManager.getIdRt();
             if (idRt == null) {
                 Toast.makeText(this, getString(R.string.toast_session_expired), Toast.LENGTH_SHORT).show();
                 return;
@@ -64,24 +59,22 @@ public class BuatPengumumanActivity extends AppCompatActivity {
             pd.setCancelable(false);
             pd.show();
 
-            Map<String, Object> pengumuman = new HashMap<>();
-            pengumuman.put(Constants.FIELD_JUDUL, judul);
-            pengumuman.put(Constants.FIELD_ISI, isi);
-            pengumuman.put(Constants.FIELD_ID_RT, idRt);
-            pengumuman.put(Constants.FIELD_TANGGAL, Timestamp.now());
+            adminRepository.submitPengumuman(judul, isi, idRt, new AdminRepository.SimpleCallback() {
+                @Override
+                public void onSuccess() {
+                    pd.dismiss();
+                    Toast.makeText(BuatPengumumanActivity.this,
+                            getString(R.string.toast_publish_success), Toast.LENGTH_SHORT).show();
+                    finish();
+                }
 
-            db.collection(Constants.COLLECTION_PENGUMUMAN)
-                    .add(pengumuman)
-                    .addOnSuccessListener(ref -> {
-                        pd.dismiss();
-                        Toast.makeText(this, getString(R.string.toast_publish_success), Toast.LENGTH_SHORT).show();
-                        finish();
-                    })
-                    .addOnFailureListener(e -> {
-                        pd.dismiss();
-                        Toast.makeText(this, getString(R.string.toast_publish_failed, e.getMessage()),
-                                Toast.LENGTH_SHORT).show();
-                    });
+                @Override
+                public void onError(String msg) {
+                    pd.dismiss();
+                    Toast.makeText(BuatPengumumanActivity.this,
+                            getString(R.string.toast_publish_failed, msg), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
     }
 }

@@ -1,19 +1,14 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.data.repository.SessionManager;
 import com.example.jagawarga.utils.Constants;
 
 public class LandingActivity extends AppCompatActivity {
@@ -23,27 +18,27 @@ public class LandingActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         // Cek apakah user sudah login sebelumnya
-        // Jika sudah, langsung arahkan ke Dashboard yang sesuai
         if (checkSession()) {
-            return; // Hentikan eksekusi agar layout landing tidak perlu dirender
+            return;
         }
 
         setContentView(R.layout.activity_landing);
 
         Button btnMulai = findViewById(R.id.btnMulai);
         btnMulai.setOnClickListener(v -> {
-            // Pindah ke halaman Login
             Intent intent = new Intent(LandingActivity.this, LoginActivity.class);
             startActivity(intent);
-            finish(); // Tutup LandingActivity agar tidak bisa kembali dengan tombol Back
+            finish();
         });
     }
 
     private boolean checkSession() {
-        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-        String savedId = prefs.getString(Constants.PREF_KEY_ID, null);
-        String savedRole = prefs.getString(Constants.PREF_KEY_ROLE, null);
-        String savedNama = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_user));
+        SessionManager session = new SessionManager(this);
+        String savedId = session.getIdWarga();
+        String savedRole = session.getRole();
+        String savedNama = session.getNama();
+        if (savedNama == null)
+            savedNama = getString(R.string.fallback_name_user);
 
         if (savedId != null && savedRole != null) {
             redirectDashboard(savedRole, savedNama);

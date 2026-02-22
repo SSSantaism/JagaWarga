@@ -1,11 +1,6 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.os.Bundle;
 import android.util.Log;
@@ -17,14 +12,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 
-import com.example.jagawarga.utils.Constants;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.example.jagawarga.data.repository.DataRepository;
+import com.example.jagawarga.data.repository.SessionManager;
+import com.example.jagawarga.viewmodel.JadwalViewModel;
 
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Locale;
+import java.util.List;
 
 public class JadwalRondaActivity extends AppCompatActivity {
 
@@ -39,27 +33,26 @@ public class JadwalRondaActivity extends AppCompatActivity {
     Button btnKembaliJadwal;
     TextView textTanggalPilihan;
 
-    // === Date Management ===
-    Calendar calendar;
-    SimpleDateFormat dateFormatDay; // Format: "Senin", "Selasa"
-    SimpleDateFormat dateFormatDisplay; // Format: "Senin, 25 November"
-
-    private FirebaseFirestore db;
+    // MVVM
+    private JadwalViewModel viewModel;
     private String currentRt;
+    private String currentUserId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_jadwal_ronda);
 
-        db = FirebaseFirestore.getInstance();
-        currentRt = PrefUtils.getIdRt(this);
+        viewModel = new ViewModelProvider(this).get(JadwalViewModel.class);
+        SessionManager session = new SessionManager(this);
+        currentRt = session.getIdRt();
+        currentUserId = session.getIdWarga();
 
         initUI();
-        initTanggal();
         setupListeners();
+        observeViewModel();
 
-        loadJadwalFromFirestore();
+        viewModel.loadJadwal(currentRt);
     }
 
     private void initUI() {
@@ -78,16 +71,8 @@ public class JadwalRondaActivity extends AppCompatActivity {
         tvJam[0] = findViewById(R.id.textJam1);
         tvJam[1] = findViewById(R.id.textJam2);
 
-        // Item containers for visibility control
         itemJadwal[0] = findViewById(R.id.itemJadwal1);
         itemJadwal[1] = findViewById(R.id.itemJadwal2);
-    }
-
-    private void initTanggal() {
-        calendar = Calendar.getInstance();
-        dateFormatDay = new SimpleDateFormat("EEEE", new Locale("id", "ID"));
-        dateFormatDisplay = new SimpleDateFormat("EEEE, dd MMMM", new Locale("id", "ID"));
-        updateTanggalUI();
     }
 
     private void setupListeners() {
@@ -96,109 +81,80 @@ public class JadwalRondaActivity extends AppCompatActivity {
         btnKembaliJadwal.setOnClickListener(back);
 
         btnPrevDate.setOnClickListener(v -> {
-            calendar.add(Calendar.DAY_OF_MONTH, -1);
-            updateTanggalUI();
-            loadJadwalFromFirestore();
+            viewModel.prevDay();
+            viewModel.loadJadwal(currentRt);
         });
 
         btnNextDate.setOnClickListener(v -> {
-            calendar.add(Calendar.DAY_OF_MONTH, 1);
-            updateTanggalUI();
-            loadJadwalFromFirestore();
+            viewModel.nextDay();
+            viewModel.loadJadwal(currentRt);
         });
     }
 
-    private void updateTanggalUI() {
-        String formatted = dateFormatDisplay.format(calendar.getTime());
-        formatted = formatted.substring(0, 1).toUpperCase() + formatted.substring(1);
-        textTanggalPilihan.setText(formatted);
-    }
+    private void observeViewModel() {
+        // Tanggal display
+        viewModel.getDisplayDate().observe(this, date -> {
+            textTanggalPilihan.setText(date);
+        });
 
-    private void loadJadwalFromFirestore() {
-        if (currentRt == null) {
-            Log.d("JadwalRonda", "currentRt is null");
-            return;
-        }
-
-        // Get current logged-in user ID for comparison
-        String currentUserId = PrefUtils.getIdWarga(this);
-
-        // Ambil nama hari (Senin, Selasa, dll)
-        String hariIni = dateFormatDay.format(calendar.getTime());
-        // Capitalize first letter
-        hariIni = hariIni.substring(0, 1).toUpperCase() + hariIni.substring(1).toLowerCase();
-
-        Log.d("JadwalRonda", "Loading jadwal for RT: " + currentRt + ", Hari: " + hariIni);
-
-        // Reset UI - hide all items first
-        for (int i = 0; i < 10; i++) {
-            if (itemJadwal[i] != null) {
-                itemJadwal[i].setVisibility(View.GONE);
+        // Jadwal list
+        viewModel.getJadwalList().observe(this, items -> {
+            // Reset UI - hide all items
+            for (int i = 0; i < 10; i++) {
+                if (itemJadwal[i] != null) {
+                    itemJadwal[i].setVisibility(View.GONE);
+                }
+                if (tvNama[i] != null) {
+                    tvNama[i].setText(getString(R.string.text_dash));
+                }
+                if (tvIdJadwal[i] != null) {
+                    tvIdJadwal[i].setText(getString(R.string.label_id_jadwal_dash));
+                }
+                if (tvJam[i] != null) {
+                    tvJam[i].setText(getString(R.string.text_dash));
+                }
             }
-            if (tvNama[i] != null) {
-                tvNama[i].setText(getString(R.string.text_dash));
-            }
-            if (tvIdJadwal[i] != null) {
-                tvIdJadwal[i].setText(getString(R.string.label_id_jadwal_dash));
-            }
-            if (tvJam[i] != null) {
-                tvJam[i].setText(getString(R.string.text_dash));
-            }
-        }
 
-        final String finalHari = hariIni;
-        final String finalUserId = currentUserId;
-        db.collection(Constants.COLLECTION_USERS)
-                .whereEqualTo(Constants.FIELD_ID_RT, currentRt)
-                .whereEqualTo(Constants.FIELD_JADWAL_HARI, hariIni)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    Log.d("JadwalRonda", "Query returned " + queryDocumentSnapshots.size() + " documents");
+            // Populate data
+            if (items != null) {
+                int index = 0;
+                for (DataRepository.JadwalItem item : items) {
+                    if (index >= 10)
+                        break;
 
-                    int index = 0;
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        if (index >= 10)
-                            break;
+                    if (itemJadwal[index] != null) {
+                        itemJadwal[index].setVisibility(View.VISIBLE);
 
-                        String docId = doc.getId();
-                        String nama = doc.getString(Constants.FIELD_NAMA);
-                        String jadwalId = doc.getString(Constants.FIELD_JADWAL_ID);
-                        Log.d("JadwalRonda", "Found user: " + nama + ", jadwal_id: " + jadwalId);
-
-                        // Show item and populate data
-                        if (itemJadwal[index] != null) {
-                            itemJadwal[index].setVisibility(View.VISIBLE);
-
-                            // Set background based on whether this is the logged-in user's schedule
-                            if (finalUserId != null && docId.equals(finalUserId)) {
-                                // Green highlight for current user's schedule
-                                itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_selected);
-                            } else {
-                                // Gray background for other users' schedules
-                                itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_normal);
-                            }
+                        // Highlight current user
+                        if (currentUserId != null && item.docId.equals(currentUserId)) {
+                            itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_selected);
+                        } else {
+                            itemJadwal[index].setBackgroundResource(R.drawable.bg_schedule_item_normal);
                         }
-                        if (tvNama[index] != null) {
-                            tvNama[index].setText(nama != null ? nama : getString(R.string.text_dash));
-                        }
-                        if (tvIdJadwal[index] != null) {
-                            tvIdJadwal[index].setText(getString(R.string.label_id_jadwal_format,
-                                    jadwalId != null ? jadwalId : getString(R.string.text_dash)));
-                        }
-                        if (tvJam[index] != null) {
-                            tvJam[index].setText(getString(R.string.text_jadwal_time));
-                        }
-                        index++;
                     }
-
-                    if (index == 0) {
-                        Log.d("JadwalRonda", "No users found for this day");
+                    if (tvNama[index] != null) {
+                        tvNama[index].setText(item.nama != null ? item.nama
+                                : getString(R.string.text_dash));
                     }
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("JadwalRonda", "Error loading jadwal: " + e.getMessage());
-                    Toast.makeText(this, getString(R.string.toast_load_jadwal_failed, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
+                    if (tvIdJadwal[index] != null) {
+                        tvIdJadwal[index].setText(getString(R.string.label_id_jadwal_format,
+                                item.jadwalId != null ? item.jadwalId
+                                        : getString(R.string.text_dash)));
+                    }
+                    if (tvJam[index] != null) {
+                        tvJam[index].setText(getString(R.string.text_jadwal_time));
+                    }
+                    index++;
+                }
+            }
+        });
+
+        // Error
+        viewModel.getErrorMessage().observe(this, msg -> {
+            if (msg != null) {
+                Toast.makeText(this, getString(R.string.toast_load_jadwal_failed, msg),
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

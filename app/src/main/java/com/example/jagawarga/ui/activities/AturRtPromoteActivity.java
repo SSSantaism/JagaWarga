@@ -1,11 +1,6 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -16,12 +11,8 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.jagawarga.data.repository.AdminRepository;
 import com.example.jagawarga.utils.Constants;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class AturRtPromoteActivity extends AppCompatActivity {
 
@@ -29,14 +20,16 @@ public class AturRtPromoteActivity extends AppCompatActivity {
     private EditText etIdWarga, etTelepon;
     private Button btnAction;
     private Button tabPromosikan, tabTurunkan;
-    private FirebaseFirestore db;
+
+    // MVVM
+    private AdminRepository adminRepository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_promote_rt);
 
-        db = FirebaseFirestore.getInstance();
+        adminRepository = new AdminRepository();
 
         btnBack = findViewById(R.id.btnBack);
         etIdWarga = findViewById(R.id.inputIDWarga);
@@ -49,8 +42,7 @@ public class AturRtPromoteActivity extends AppCompatActivity {
 
         // Tab navigation
         tabTurunkan.setOnClickListener(v -> {
-            Intent intent = new Intent(this, AturRtRevokeActivity.class);
-            startActivity(intent);
+            startActivity(new Intent(this, AturRtRevokeActivity.class));
             finish();
         });
 
@@ -62,54 +54,42 @@ public class AturRtPromoteActivity extends AppCompatActivity {
                 return;
             }
 
-            // Format nomor ke +62
-            String formatted = formatPhoneNumber(rawPhone);
+            String formatted = AdminRepository.formatPhoneNumber(rawPhone);
 
-            // Cari user berdasarkan nomor telepon
-            db.collection(Constants.COLLECTION_USERS)
-                    .whereEqualTo(Constants.FIELD_TELEPON, formatted)
-                    .get()
-                    .addOnSuccessListener(queryDocumentSnapshots -> {
-                        if (queryDocumentSnapshots.isEmpty()) {
-                            Toast.makeText(this, getString(R.string.toast_user_not_found), Toast.LENGTH_SHORT).show();
-                            return;
+            adminRepository.changeUserRole(formatted, Constants.ROLE_KETUA_RT,
+                    new AdminRepository.FindUserCallback() {
+                        @Override
+                        public void onFound(String uid) {
+                            /* user found, update in progress */ }
+
+                        @Override
+                        public void onNotFound() {
+                            Toast.makeText(AturRtPromoteActivity.this,
+                                    getString(R.string.toast_user_not_found), Toast.LENGTH_SHORT).show();
                         }
 
-                        for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                            String uid = doc.getId();
-
-                            // Update role jadi KetuaRT
-                            Map<String, Object> updates = new HashMap<>();
-                            updates.put(Constants.FIELD_ROLE, Constants.ROLE_KETUA_RT);
-
-                            db.collection(Constants.COLLECTION_USERS).document(uid)
-                                    .update(updates)
-                                    .addOnSuccessListener(aVoid -> {
-                                        Toast.makeText(this, getString(R.string.toast_promote_success),
-                                                Toast.LENGTH_SHORT).show();
-                                        finish();
-                                    })
-                                    .addOnFailureListener(e -> {
-                                        Toast.makeText(this,
-                                                getString(R.string.toast_update_failed, e.getMessage()),
-                                                Toast.LENGTH_SHORT).show();
-                                    });
-                            break;
+                        @Override
+                        public void onError(String msg) {
+                            Toast.makeText(AturRtPromoteActivity.this,
+                                    getString(R.string.toast_search_user_failed, msg),
+                                    Toast.LENGTH_SHORT).show();
                         }
-                    })
-                    .addOnFailureListener(e -> {
-                        Toast.makeText(this, getString(R.string.toast_search_user_failed, e.getMessage()),
-                                Toast.LENGTH_SHORT).show();
+                    },
+                    new AdminRepository.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            Toast.makeText(AturRtPromoteActivity.this,
+                                    getString(R.string.toast_promote_success), Toast.LENGTH_SHORT).show();
+                            finish();
+                        }
+
+                        @Override
+                        public void onError(String msg) {
+                            Toast.makeText(AturRtPromoteActivity.this,
+                                    getString(R.string.toast_update_failed, msg),
+                                    Toast.LENGTH_SHORT).show();
+                        }
                     });
         });
-    }
-
-    private String formatPhoneNumber(String phone) {
-        if (phone.startsWith("0")) {
-            return "+62" + phone.substring(1);
-        } else if (!phone.startsWith("+")) {
-            return "+62" + phone;
-        }
-        return phone;
     }
 }

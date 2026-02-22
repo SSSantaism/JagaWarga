@@ -1,20 +1,15 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
 import com.example.jagawarga.NotificationHelper;
 import com.example.jagawarga.RondaReminderManager;
 import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -23,24 +18,22 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.data.model.PosRonda;
+import com.example.jagawarga.data.model.User;
+import com.example.jagawarga.data.repository.AuthRepository;
+import com.example.jagawarga.data.repository.SessionManager;
+import com.example.jagawarga.ui.adapter.PengumumanAdapter;
 import com.example.jagawarga.utils.Constants;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.example.jagawarga.viewmodel.DashboardViewModel;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class DashboardActivity extends AppCompatActivity {
 
@@ -54,21 +47,26 @@ public class DashboardActivity extends AppCompatActivity {
     private TextView tvContactLocation;
     private ImageView imgWhatsapp;
 
-    // --- TAMBAHAN VARIABEL RECYCLERVIEW ---
+    // RecyclerView
     private RecyclerView rvPengumuman;
+    private PengumumanAdapter pengumumanAdapter;
 
-    // User Data
+    // User Data (from session)
     private String idWarga, idRt, namaUser;
     private String currentPosPhone = null;
 
-    private FirebaseFirestore db;
+    // MVVM
+    private DashboardViewModel viewModel;
+    private SessionManager sessionManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
 
-        db = FirebaseFirestore.getInstance();
+        // Inisialisasi MVVM
+        viewModel = new ViewModelProvider(this).get(DashboardViewModel.class);
+        sessionManager = new SessionManager(this);
 
         loadUserData();
         initViews();
@@ -82,15 +80,61 @@ public class DashboardActivity extends AppCompatActivity {
         setupMenuNavigation(menuJadwal, JadwalRondaActivity.class);
 
         setupContactCard();
-        loadPosRondaForUser();
-        loadPengumuman();
+        observeViewModel();
+
+        // Trigger data loading
+        viewModel.loadPosRonda(idRt);
+        viewModel.loadPengumuman();
     }
 
+    // ========================================================================
+    // ViewModel Observers
+    // ========================================================================
+
+    private void observeViewModel() {
+        // Pos Ronda data
+        viewModel.getPosRondaData().observe(this, posRonda -> {
+            if (posRonda != null) {
+                currentPosPhone = posRonda.getTelepon();
+                if (currentPosPhone != null) {
+                    tvContactNumber.setText(currentPosPhone);
+                } else {
+                    tvContactNumber.setText(getString(R.string.text_dash));
+                }
+                if (posRonda.getLokasi() != null) {
+                    tvContactLocation.setText(posRonda.getLokasi());
+                } else {
+                    tvContactLocation.setText(getString(R.string.text_belum_diatur));
+                }
+            }
+        });
+
+        // Pengumuman data
+        viewModel.getPengumumanList().observe(this, dataList -> {
+            if (dataList != null) {
+                pengumumanAdapter.updateData(dataList);
+            }
+        });
+
+        // Error
+        viewModel.getErrorMessage().observe(this, msg -> {
+            if (msg != null) {
+                Log.e("Dashboard", msg);
+            }
+        });
+    }
+
+    // ========================================================================
+    // UI Initialization
+    // ========================================================================
+
     private void loadUserData() {
-        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-        idWarga = prefs.getString(Constants.PREF_KEY_ID, null);
-        idRt = prefs.getString(Constants.PREF_KEY_ID_RT, null);
-        namaUser = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_pengguna));
+        idWarga = sessionManager.getIdWarga();
+        idRt = sessionManager.getIdRt();
+        namaUser = sessionManager.getNama();
+        if (namaUser == null) {
+            namaUser = getString(R.string.fallback_name_pengguna);
+        }
     }
 
     private void initViews() {
@@ -109,6 +153,8 @@ public class DashboardActivity extends AppCompatActivity {
 
         rvPengumuman = findViewById(R.id.rvPengumuman);
         rvPengumuman.setLayoutManager(new LinearLayoutManager(this));
+        pengumumanAdapter = new PengumumanAdapter(new ArrayList<>());
+        rvPengumuman.setAdapter(pengumumanAdapter);
     }
 
     private void setGreeting() {
@@ -120,6 +166,10 @@ public class DashboardActivity extends AppCompatActivity {
         SimpleDateFormat sdf = new SimpleDateFormat("EEEE, d MMMM yyyy", new Locale("id", "ID"));
         tanggalCurrent.setText(sdf.format(cal.getTime()));
     }
+
+    // ========================================================================
+    // Navigation (tetap di Activity)
+    // ========================================================================
 
     private void setupMenuNavigation(LinearLayout menu, Class<?> targetActivity) {
         if (menu == null)
@@ -133,6 +183,10 @@ public class DashboardActivity extends AppCompatActivity {
         });
     }
 
+    // ========================================================================
+    // Logout (tetap di Activity)
+    // ========================================================================
+
     private void setupLogoutLogic() {
         if (profileContainer != null) {
             profileContainer.setOnClickListener(v -> {
@@ -140,10 +194,8 @@ public class DashboardActivity extends AppCompatActivity {
                         .setTitle(getString(R.string.dialog_logout_title))
                         .setMessage(getString(R.string.dialog_logout_message))
                         .setPositiveButton(getString(R.string.dialog_logout_positive), (dialog, which) -> {
-                            SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-                            prefs.edit().clear().apply();
-
-                            FirebaseAuth.getInstance().signOut();
+                            sessionManager.clearSession();
+                            new AuthRepository().logout();
 
                             Intent intent = new Intent(DashboardActivity.this, LoginActivity.class);
                             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -155,6 +207,10 @@ public class DashboardActivity extends AppCompatActivity {
             });
         }
     }
+
+    // ========================================================================
+    // WhatsApp Contact
+    // ========================================================================
 
     private void setupContactCard() {
         if (imgWhatsapp != null) {
@@ -182,112 +238,6 @@ public class DashboardActivity extends AppCompatActivity {
                 startActivity(browserIntent);
             } catch (Exception ex) {
                 Toast.makeText(this, getString(R.string.toast_no_whatsapp_app), Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
-    private void loadPosRondaForUser() {
-        if (idRt == null || idRt.isEmpty())
-            return;
-
-        db.collection(Constants.COLLECTION_DATA_RT).document(idRt)
-                .get()
-                .addOnSuccessListener(documentSnapshot -> {
-                    if (documentSnapshot.exists()) {
-                        currentPosPhone = documentSnapshot.getString(Constants.FIELD_POS_PHONE);
-                        String lokasi = documentSnapshot.getString(Constants.FIELD_LOKASI);
-                        if (currentPosPhone != null)
-                            tvContactNumber.setText(currentPosPhone);
-                        if (lokasi != null)
-                            tvContactLocation.setText(lokasi);
-                    } else {
-                        // Default dummy data if not set yet
-                        tvContactLocation.setText(getString(R.string.text_belum_diatur));
-                        tvContactNumber.setText(getString(R.string.text_dash));
-                    }
-                })
-                .addOnFailureListener(e -> Log.e("FIRESTORE_RT", e.getMessage()));
-    }
-
-    // --- FUNGSI LOAD PENGUMUMAN (FIRESTORE) - UNIVERSAL UNTUK SEMUA USER ---
-    private void loadPengumuman() {
-        db.collection(Constants.COLLECTION_PENGUMUMAN)
-                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
-                    List<Map<String, Object>> dataList = new ArrayList<>();
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        dataList.add(doc.getData());
-                    }
-                    PengumumanAdapter adapter = new PengumumanAdapter(dataList);
-                    rvPengumuman.setAdapter(adapter);
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("PENGUMUMAN", "Error loading pengumuman: " + e.getMessage());
-                    e.printStackTrace();
-                });
-    }
-
-    // --- INNER CLASS ADAPTER ---
-    class PengumumanAdapter extends RecyclerView.Adapter<PengumumanAdapter.Holder> {
-        List<Map<String, Object>> data;
-
-        public PengumumanAdapter(List<Map<String, Object>> data) {
-            this.data = data;
-        }
-
-        @Override
-        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_pengumuman, parent, false);
-            return new Holder(v);
-        }
-
-        @Override
-        public void onBindViewHolder(Holder holder, int position) {
-            try {
-                Map<String, Object> item = data.get(position);
-
-                // Format judul: "RT [id_rt] - [judul]"
-                String idRtPengumuman = (String) item.get(Constants.FIELD_ID_RT);
-                String judul = (String) item.get(Constants.FIELD_JUDUL);
-                String formattedJudul = getString(R.string.pengumuman_judul_format,
-                        idRtPengumuman != null ? idRtPengumuman : "-",
-                        judul != null ? judul : "-");
-                holder.tvJudul.setText(formattedJudul);
-
-                // Isi pengumuman
-                String isi = (String) item.get(Constants.FIELD_ISI);
-                holder.tvIsi.setText(isi != null ? isi : getString(R.string.text_dash));
-
-                // Format tanggal: "DD MMM" (contoh: "12 Des")
-                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
-                        .get(Constants.FIELD_TANGGAL);
-                if (timestamp != null) {
-                    Date date = timestamp.toDate();
-                    SimpleDateFormat sdf = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
-                    holder.tvTanggal.setText(sdf.format(date));
-                } else {
-                    holder.tvTanggal.setText(getString(R.string.text_dash));
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public int getItemCount() {
-            return data.size();
-        }
-
-        class Holder extends RecyclerView.ViewHolder {
-            TextView tvJudul, tvIsi, tvTanggal;
-
-            public Holder(View v) {
-                super(v);
-                tvJudul = v.findViewById(R.id.tvJudulPengumuman);
-                tvIsi = v.findViewById(R.id.tvIsiPengumuman);
-                tvTanggal = v.findViewById(R.id.tvTanggalPengumuman);
             }
         }
     }

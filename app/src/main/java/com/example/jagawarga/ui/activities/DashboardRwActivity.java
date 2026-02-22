@@ -1,19 +1,13 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
 import com.example.jagawarga.NotificationHelper;
 import com.example.jagawarga.RondaReminderManager;
 import com.example.jagawarga.TukarJadwalListener;
 import com.example.jagawarga.BootReceiver;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -22,22 +16,20 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.data.repository.AuthRepository;
+import com.example.jagawarga.data.repository.SessionManager;
+import com.example.jagawarga.ui.adapter.PengumumanAdapter;
 import com.example.jagawarga.utils.Constants;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.example.jagawarga.viewmodel.DashboardViewModel;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class DashboardRwActivity extends AppCompatActivity {
 
@@ -52,19 +44,24 @@ public class DashboardRwActivity extends AppCompatActivity {
 
     // Pengumuman
     private RecyclerView rvPengumuman;
-    private FirebaseFirestore db;
 
-    // DATA USER RW (ambil dari SharedPreferences)
+    // MVVM
+    private DashboardViewModel viewModel;
+    private SessionManager sessionManager;
+    private PengumumanAdapter pengumumanAdapter;
+
+    // DATA USER RW
     private String idRw;
     private String namaRw;
-    private String idRtRw; // kalau RW punya RT khusus atau bisa kosong
+    private String idRtRw;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard_rw);
 
-        db = FirebaseFirestore.getInstance();
+        viewModel = new ViewModelProvider(this).get(DashboardViewModel.class);
+        sessionManager = new SessionManager(this);
 
         loadUserData();
         initViews();
@@ -72,18 +69,20 @@ public class DashboardRwActivity extends AppCompatActivity {
         setTodayDate();
         setupMenuClick();
         setupLogout();
-        loadPengumuman();
+
+        observeViewModel();
+        viewModel.loadPengumuman();
     }
 
     // =======================================
-    // LOAD DATA USER RW DARI SHAREDPREF
+    // LOAD DATA USER RW DARI SESSION MANAGER
     // =======================================
     private void loadUserData() {
-        SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-
-        idRw = prefs.getString(Constants.PREF_KEY_ID, null);
-        namaRw = prefs.getString(Constants.PREF_KEY_NAMA, getString(R.string.fallback_name_pak_rw));
-        idRtRw = prefs.getString(Constants.PREF_KEY_ID_RT, null); // optional, kalau mau dipakai
+        idRw = sessionManager.getIdWarga();
+        namaRw = sessionManager.getNama();
+        if (namaRw == null)
+            namaRw = getString(R.string.fallback_name_pak_rw);
+        idRtRw = sessionManager.getIdRt();
 
         if (idRw == null) {
             Toast.makeText(this, getString(R.string.toast_rw_data_not_found), Toast.LENGTH_SHORT).show();
@@ -108,10 +107,11 @@ public class DashboardRwActivity extends AppCompatActivity {
         // Pengumuman RecyclerView
         rvPengumuman = findViewById(R.id.rvPengumuman);
         rvPengumuman.setLayoutManager(new LinearLayoutManager(this));
+        pengumumanAdapter = new PengumumanAdapter(new ArrayList<>());
+        rvPengumuman.setAdapter(pengumumanAdapter);
     }
 
     private void setGreeting() {
-        // contoh: "Hai, Pak RW Budi !"
         tvGreeting.setText(getString(R.string.greeting_format, namaRw));
         tvSubGreeting.setText(getString(R.string.sub_greeting_ronda));
     }
@@ -127,25 +127,19 @@ public class DashboardRwActivity extends AppCompatActivity {
     // CLICK MENU
     // =======================================
     private void setupMenuClick() {
-        // MENU: Kelola Ketua RT -> AturRtActivity
         if (menuKelolaKetuaRT != null) {
             menuKelolaKetuaRT.setOnClickListener(v -> {
-                Intent intent = new Intent(DashboardRwActivity.this, AturRtPromoteActivity.class);
-
-                // kalau mau kirim data RW ke halaman Atur RT:
+                Intent intent = new Intent(this, AturRtPromoteActivity.class);
                 intent.putExtra(Constants.EXTRA_ID_RW, idRw);
                 intent.putExtra(Constants.EXTRA_NAMA_RW, namaRw);
                 intent.putExtra(Constants.EXTRA_ID_RT_RW, idRtRw);
-
                 startActivity(intent);
             });
         }
 
-        // MENU: Buat Pengumuman -> BuatPengumumanActivity
         if (menuBuatPengumuman != null) {
             menuBuatPengumuman.setOnClickListener(v -> {
-                Intent intent = new Intent(DashboardRwActivity.this, BuatPengumumanActivity.class);
-                // bisa juga kirim nama RW / id RW jika perlu
+                Intent intent = new Intent(this, BuatPengumumanActivity.class);
                 intent.putExtra(Constants.EXTRA_ID_RW, idRw);
                 startActivity(intent);
             });
@@ -162,12 +156,10 @@ public class DashboardRwActivity extends AppCompatActivity {
                         .setTitle(getString(R.string.dialog_logout_title))
                         .setMessage(getString(R.string.dialog_logout_message))
                         .setPositiveButton(getString(R.string.dialog_logout_positive), (dialog, which) -> {
-                            SharedPreferences prefs = getSharedPreferences(Constants.PREF_USER_DATA, MODE_PRIVATE);
-                            prefs.edit().clear().apply();
+                            sessionManager.clearSession();
+                            new AuthRepository().logout();
 
-                            FirebaseAuth.getInstance().signOut();
-
-                            Intent intent = new Intent(DashboardRwActivity.this, LoginActivity.class);
+                            Intent intent = new Intent(this, LoginActivity.class);
                             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                             startActivity(intent);
                             finish();
@@ -179,87 +171,13 @@ public class DashboardRwActivity extends AppCompatActivity {
     }
 
     // =======================================
-    // LOAD PENGUMUMAN (UNIVERSAL)
+    // OBSERVE VIEWMODEL
     // =======================================
-    private void loadPengumuman() {
-        db.collection(Constants.COLLECTION_PENGUMUMAN)
-                .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    Log.d("PENGUMUMAN", "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
-                    List<Map<String, Object>> dataList = new ArrayList<>();
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                        dataList.add(doc.getData());
-                    }
-                    PengumumanAdapter adapter = new PengumumanAdapter(dataList);
-                    rvPengumuman.setAdapter(adapter);
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("PENGUMUMAN", "Error loading pengumuman: " + e.getMessage());
-                    e.printStackTrace();
-                });
-    }
-
-    // --- INNER CLASS ADAPTER ---
-    class PengumumanAdapter extends RecyclerView.Adapter<PengumumanAdapter.Holder> {
-        List<Map<String, Object>> data;
-
-        public PengumumanAdapter(List<Map<String, Object>> data) {
-            this.data = data;
-        }
-
-        @Override
-        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_pengumuman, parent, false);
-            return new Holder(v);
-        }
-
-        @Override
-        public void onBindViewHolder(Holder holder, int position) {
-            try {
-                Map<String, Object> item = data.get(position);
-
-                // Format judul: "RT [id_rt] - [judul]"
-                String idRtPengumuman = (String) item.get(Constants.FIELD_ID_RT);
-                String judul = (String) item.get(Constants.FIELD_JUDUL);
-                String formattedJudul = getString(R.string.pengumuman_judul_format,
-                        idRtPengumuman != null ? idRtPengumuman : "-",
-                        judul != null ? judul : "-");
-                holder.tvJudul.setText(formattedJudul);
-
-                // Isi pengumuman
-                String isi = (String) item.get(Constants.FIELD_ISI);
-                holder.tvIsi.setText(isi != null ? isi : getString(R.string.text_dash));
-
-                // Format tanggal: "DD MMM" (contoh: "12 Des")
-                com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) item
-                        .get(Constants.FIELD_TANGGAL);
-                if (timestamp != null) {
-                    Date date = timestamp.toDate();
-                    SimpleDateFormat sdfTanggal = new SimpleDateFormat("dd MMM", new Locale("id", "ID"));
-                    holder.tvTanggal.setText(sdfTanggal.format(date));
-                } else {
-                    holder.tvTanggal.setText(getString(R.string.text_dash));
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
+    private void observeViewModel() {
+        viewModel.getPengumumanList().observe(this, dataList -> {
+            if (dataList != null) {
+                pengumumanAdapter.updateData(dataList);
             }
-        }
-
-        @Override
-        public int getItemCount() {
-            return data.size();
-        }
-
-        class Holder extends RecyclerView.ViewHolder {
-            TextView tvJudul, tvIsi, tvTanggal;
-
-            public Holder(View v) {
-                super(v);
-                tvJudul = v.findViewById(R.id.tvJudulPengumuman);
-                tvIsi = v.findViewById(R.id.tvIsiPengumuman);
-                tvTanggal = v.findViewById(R.id.tvTanggalPengumuman);
-            }
-        }
+        });
     }
 }

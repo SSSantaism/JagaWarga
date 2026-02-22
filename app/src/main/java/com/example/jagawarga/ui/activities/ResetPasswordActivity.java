@@ -1,11 +1,6 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.os.Bundle;
 import android.text.InputType;
@@ -17,7 +12,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.firebase.auth.FirebaseAuth;
+import com.example.jagawarga.data.repository.AuthRepository;
 import com.google.firebase.auth.FirebaseUser;
 
 public class ResetPasswordActivity extends AppCompatActivity {
@@ -28,15 +23,20 @@ public class ResetPasswordActivity extends AppCompatActivity {
     private ImageView btnTogglePass;
     private boolean isPasswordVisible = false;
 
+    // MVVM
+    private AuthRepository authRepository;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_reset_password);
 
+        authRepository = new AuthRepository();
+
         initViews();
         setupListeners();
 
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = authRepository.getCurrentUser();
         if (user == null) {
             Toast.makeText(this, getString(R.string.toast_reset_password_info), Toast.LENGTH_LONG).show();
             btnReset.setEnabled(false);
@@ -83,7 +83,7 @@ public class ResetPasswordActivity extends AppCompatActivity {
     }
 
     private void changePassword(String newPass) {
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = authRepository.getCurrentUser();
         if (user != null) {
             user.updatePassword(newPass)
                     .addOnCompleteListener(task -> {

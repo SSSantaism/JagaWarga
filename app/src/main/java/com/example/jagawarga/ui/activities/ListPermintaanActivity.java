@@ -1,11 +1,6 @@
 package com.example.jagawarga.ui.activities;
 
 import com.example.jagawarga.R;
-import com.example.jagawarga.PrefUtils;
-import com.example.jagawarga.NotificationHelper;
-import com.example.jagawarga.RondaReminderManager;
-import com.example.jagawarga.TukarJadwalListener;
-import com.example.jagawarga.BootReceiver;
 
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -19,13 +14,10 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.example.jagawarga.utils.Constants;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.example.jagawarga.data.repository.AdminRepository;
+import com.example.jagawarga.data.repository.SessionManager;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 
 public class ListPermintaanActivity extends AppCompatActivity {
 
@@ -33,22 +25,23 @@ public class ListPermintaanActivity extends AppCompatActivity {
     private ImageButton btnBack;
     private Button btnTabAbsensi, btnTabRegister;
 
-    private String currentIdRt = "";
-    private FirebaseFirestore db;
+    // MVVM
+    private AdminRepository adminRepository;
+    private String currentIdRt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list_permintaan_register);
 
-        // Init Views
+        adminRepository = new AdminRepository();
+        SessionManager session = new SessionManager(this);
+        currentIdRt = session.getIdRt();
+
         btnBack = findViewById(R.id.btnBack);
         containerList = findViewById(R.id.containerList);
         btnTabAbsensi = findViewById(R.id.btnTabAbsensi);
         btnTabRegister = findViewById(R.id.btnTabRegister);
-
-        db = FirebaseFirestore.getInstance();
-        currentIdRt = PrefUtils.getIdRt(this);
 
         btnBack.setOnClickListener(v -> finish());
 
@@ -56,20 +49,20 @@ public class ListPermintaanActivity extends AppCompatActivity {
         btnTabRegister.setOnClickListener(v -> {
             updateTabUI(true);
             if (currentIdRt != null)
-                loadPendingRegister(currentIdRt);
+                loadPendingRegister();
         });
 
         // 2. Klik Tab Absensi
         btnTabAbsensi.setOnClickListener(v -> {
             updateTabUI(false);
             if (currentIdRt != null)
-                loadPendingAbsen(currentIdRt);
+                loadPendingAbsen();
         });
 
         // Default Load
         updateTabUI(true);
         if (currentIdRt != null)
-            loadPendingRegister(currentIdRt);
+            loadPendingRegister();
     }
 
     private void updateTabUI(boolean isRegisterActive) {
@@ -88,30 +81,32 @@ public class ListPermintaanActivity extends AppCompatActivity {
     }
 
     // === REGISTER PENDING ===
-    private void loadPendingRegister(String idRt) {
-        db.collection(Constants.COLLECTION_USERS)
-                .whereEqualTo(Constants.FIELD_ID_RT, idRt)
-                .whereEqualTo(Constants.FIELD_STATUS_WARGA, Constants.STATUS_PENDING)
-                .get()
-                .addOnSuccessListener(snap -> {
-                    containerList.removeAllViews();
-                    if (snap.isEmpty()) {
-                        Toast.makeText(this, getString(R.string.toast_no_pending_register),
-                                Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    for (QueryDocumentSnapshot doc : snap) {
-                        String idWarga = doc.getId();
-                        String nama = doc.getString(Constants.FIELD_NAMA);
-                        String telp = doc.getString(Constants.FIELD_TELEPON);
-                        addItemRegister(idWarga, nama, telp, idRt);
-                    }
-                })
-                .addOnFailureListener(e -> Toast.makeText(this, getString(R.string.toast_load_failed, e.getMessage()),
-                        Toast.LENGTH_SHORT).show());
+    private void loadPendingRegister() {
+        adminRepository.loadPendingRegister(currentIdRt, new AdminRepository.PendingListCallback() {
+            @Override
+            public void onSuccess(List<AdminRepository.PendingItem> items) {
+                containerList.removeAllViews();
+                for (AdminRepository.PendingItem item : items) {
+                    addItemRegister(item);
+                }
+            }
+
+            @Override
+            public void onEmpty() {
+                containerList.removeAllViews();
+                Toast.makeText(ListPermintaanActivity.this,
+                        getString(R.string.toast_no_pending_register), Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(String msg) {
+                Toast.makeText(ListPermintaanActivity.this,
+                        getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
-    private void addItemRegister(String idWarga, String nama, String telp, String idRt) {
+    private void addItemRegister(AdminRepository.PendingItem item) {
         View itemView = LayoutInflater.from(this).inflate(R.layout.item_request_register, containerList, false);
 
         TextView tvNama = itemView.findViewById(R.id.tvNamaWarga);
@@ -119,116 +114,81 @@ public class ListPermintaanActivity extends AppCompatActivity {
         Button btnAcc = itemView.findViewById(R.id.btnAcc);
         Button btnReject = itemView.findViewById(R.id.btnReject);
 
-        tvNama.setText(nama);
-        tvTelp.setText(telp);
+        tvNama.setText(item.nama);
+        tvTelp.setText(item.telepon);
 
         btnAcc.setOnClickListener(v -> {
             btnAcc.setEnabled(false);
             btnReject.setEnabled(false);
-            getBalancedDayForRt(idRt, balancedDay -> {
-                String jadwalId = generateJadwalId(idRt);
-                Map<String, Object> updates = new HashMap<>();
-                updates.put(Constants.FIELD_STATUS_WARGA, Constants.STATUS_VERIFIED);
-                updates.put(Constants.FIELD_JADWAL_HARI, balancedDay);
-                updates.put(Constants.FIELD_JADWAL_ID, jadwalId);
 
-                db.collection(Constants.COLLECTION_USERS).document(idWarga)
-                        .update(updates)
-                        .addOnSuccessListener(aVoid -> {
-                            Toast.makeText(this,
-                                    getString(R.string.toast_warga_accepted, balancedDay),
+            adminRepository.acceptRegister(item.docId, currentIdRt,
+                    new AdminRepository.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            Toast.makeText(ListPermintaanActivity.this,
+                                    getString(R.string.toast_warga_accepted, ""),
                                     Toast.LENGTH_SHORT).show();
                             containerList.removeView(itemView);
-                        })
-                        .addOnFailureListener(e -> {
+                        }
+
+                        @Override
+                        public void onError(String msg) {
                             btnAcc.setEnabled(true);
                             btnReject.setEnabled(true);
-                            Toast.makeText(this, getString(R.string.toast_error_generic, e.getMessage()),
+                            Toast.makeText(ListPermintaanActivity.this,
+                                    getString(R.string.toast_error_generic, msg),
                                     Toast.LENGTH_SHORT).show();
-                        });
-            });
+                        }
+                    });
         });
 
         btnReject.setOnClickListener(v -> {
-            db.collection(Constants.COLLECTION_USERS).document(idWarga)
-                    .delete()
-                    .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, getString(R.string.toast_warga_rejected),
-                                Toast.LENGTH_SHORT).show();
-                        containerList.removeView(itemView);
-                    });
+            adminRepository.rejectRegister(item.docId, new AdminRepository.SimpleCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_warga_rejected), Toast.LENGTH_SHORT).show();
+                    containerList.removeView(itemView);
+                }
+
+                @Override
+                public void onError(String msg) {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_error_generic, msg), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
 
         containerList.addView(itemView);
     }
 
-    private String generateJadwalId(String rt) {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        StringBuilder randomPart = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            int idx = (int) (Math.random() * chars.length());
-            randomPart.append(chars.charAt(idx));
-        }
-        return "JDW-" + rt + "-" + randomPart.toString();
-    }
-
-    private interface OnBalancedDayCallback {
-        void onResult(String day);
-    }
-
-    private void getBalancedDayForRt(String rt, OnBalancedDayCallback callback) {
-        String[] days = { "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu" };
-        int[] counts = new int[7];
-        AtomicInteger completed = new AtomicInteger(0);
-        for (int i = 0; i < days.length; i++) {
-            final int idx = i;
-            db.collection(Constants.COLLECTION_USERS)
-                    .whereEqualTo(Constants.FIELD_ID_RT, rt)
-                    .whereEqualTo(Constants.FIELD_JADWAL_HARI, days[idx])
-                    .get()
-                    .addOnSuccessListener(s -> {
-                        counts[idx] = s.size();
-                        if (completed.incrementAndGet() == 7) {
-                            int min = 0;
-                            for (int j = 1; j < 7; j++)
-                                if (counts[j] < counts[min])
-                                    min = j;
-                            callback.onResult(days[min]);
-                        }
-                    })
-                    .addOnFailureListener(e -> {
-                        if (completed.incrementAndGet() == 7)
-                            callback.onResult(days[(int) (Math.random() * days.length)]);
-                    });
-        }
-    }
-
     // === ABSEN PENDING ===
-    private void loadPendingAbsen(String idRt) {
-        db.collection(Constants.COLLECTION_ABSENSI)
-                .whereEqualTo(Constants.FIELD_ID_RT, idRt)
-                .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_PENDING)
-                .get()
-                .addOnSuccessListener(snap -> {
-                    containerList.removeAllViews();
-                    if (snap.isEmpty()) {
-                        Toast.makeText(this, getString(R.string.toast_no_pending_absen),
-                                Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    for (QueryDocumentSnapshot doc : snap) {
-                        String idAbsen = doc.getId();
-                        String nama = doc.getString(Constants.FIELD_NAMA);
-                        Object waktuObj = doc.get(Constants.FIELD_WAKTU);
-                        String waktuStr = waktuObj != null ? waktuObj.toString() : "-";
-                        addItemAbsen(idAbsen, nama, waktuStr);
-                    }
-                })
-                .addOnFailureListener(e -> Toast.makeText(this, getString(R.string.toast_load_failed, e.getMessage()),
-                        Toast.LENGTH_SHORT).show());
+    private void loadPendingAbsen() {
+        adminRepository.loadPendingAbsen(currentIdRt, new AdminRepository.AbsenPendingListCallback() {
+            @Override
+            public void onSuccess(List<AdminRepository.AbsenPendingItem> items) {
+                containerList.removeAllViews();
+                for (AdminRepository.AbsenPendingItem item : items) {
+                    addItemAbsen(item);
+                }
+            }
+
+            @Override
+            public void onEmpty() {
+                containerList.removeAllViews();
+                Toast.makeText(ListPermintaanActivity.this,
+                        getString(R.string.toast_no_pending_absen), Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(String msg) {
+                Toast.makeText(ListPermintaanActivity.this,
+                        getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
-    private void addItemAbsen(String idAbsen, String nama, String waktu) {
+    private void addItemAbsen(AdminRepository.AbsenPendingItem item) {
         View itemView = LayoutInflater.from(this).inflate(R.layout.item_request_absen, containerList, false);
 
         TextView tvNama = itemView.findViewById(R.id.tvNamaWargaAbsen);
@@ -236,27 +196,41 @@ public class ListPermintaanActivity extends AppCompatActivity {
         Button btnAcc = itemView.findViewById(R.id.btnAccAbsen);
         Button btnReject = itemView.findViewById(R.id.btnRejectAbsen);
 
-        tvNama.setText(nama);
-        tvWaktu.setText(getString(R.string.label_pukul_format, waktu));
+        tvNama.setText(item.nama);
+        tvWaktu.setText(getString(R.string.label_pukul_format, item.waktu));
 
         btnAcc.setOnClickListener(v -> {
-            db.collection(Constants.COLLECTION_ABSENSI).document(idAbsen)
-                    .update(Constants.FIELD_STATUS, Constants.STATUS_VERIFIED)
-                    .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, getString(R.string.toast_absen_accepted),
-                                Toast.LENGTH_SHORT).show();
-                        containerList.removeView(itemView);
-                    });
+            adminRepository.acceptAbsen(item.docId, new AdminRepository.SimpleCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_absen_accepted), Toast.LENGTH_SHORT).show();
+                    containerList.removeView(itemView);
+                }
+
+                @Override
+                public void onError(String msg) {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_error_generic, msg), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
 
         btnReject.setOnClickListener(v -> {
-            db.collection(Constants.COLLECTION_ABSENSI).document(idAbsen)
-                    .update(Constants.FIELD_STATUS, Constants.STATUS_REJECTED)
-                    .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(this, getString(R.string.toast_absen_rejected),
-                                Toast.LENGTH_SHORT).show();
-                        containerList.removeView(itemView);
-                    });
+            adminRepository.rejectAbsen(item.docId, new AdminRepository.SimpleCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_absen_rejected), Toast.LENGTH_SHORT).show();
+                    containerList.removeView(itemView);
+                }
+
+                @Override
+                public void onError(String msg) {
+                    Toast.makeText(ListPermintaanActivity.this,
+                            getString(R.string.toast_error_generic, msg), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
 
         containerList.addView(itemView);
