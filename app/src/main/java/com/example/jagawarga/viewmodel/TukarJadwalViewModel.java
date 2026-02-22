@@ -9,6 +9,8 @@ import com.example.jagawarga.data.repository.TukarJadwalRepository;
 /**
  * ViewModel untuk TukarJadwalActivity.
  * Mengelola state pencarian target dan pengiriman swap request.
+ *
+ * Menggunakan Task Chaining — tidak ada nested callback.
  */
 public class TukarJadwalViewModel extends ViewModel {
 
@@ -31,50 +33,31 @@ public class TukarJadwalViewModel extends ViewModel {
 
     /**
      * Cari target user dan kirim swap request.
+     * Satu panggilan Task chain ke repository — flat, tanpa nested callback.
      */
     public void sendSwapRequest(String myUserId, String myNama, String myJadwalId,
             String myJadwalHari, String myIdRt,
             String targetJadwalId) {
         isLoading.setValue(true);
 
-        repository.findTargetUser(targetJadwalId, myIdRt,
-                new TukarJadwalRepository.FindTargetCallback() {
-                    @Override
-                    public void onFound(String targetUserId, String targetNama, String targetJadwalHari) {
-                        // Target ditemukan, kirim request
-                        repository.sendSwapRequest(
-                                myUserId, myNama, myJadwalId, myJadwalHari, myIdRt,
-                                targetUserId, targetNama, targetJadwalHari, targetJadwalId,
-                                new TukarJadwalRepository.SwapRequestCallback() {
-                                    @Override
-                                    public void onSuccess(String nama) {
-                                        isLoading.setValue(false);
-                                        swapResult.setValue(SwapResult.success(nama));
-                                    }
+        repository.sendSwapRequest(myUserId, myNama, myJadwalId,
+                myJadwalHari, myIdRt, targetJadwalId)
+                .addOnCompleteListener(task -> {
+                    isLoading.setValue(false);
 
-                                    @Override
-                                    public void onAlreadyExists() {
-                                        isLoading.setValue(false);
-                                        swapResult.setValue(SwapResult.alreadyExists());
-                                    }
-
-                                    @Override
-                                    public void onError(String msg) {
-                                        isLoading.setValue(false);
-                                        swapResult.setValue(SwapResult.error(msg));
-                                    }
-                                });
+                    if (task.isSuccessful()) {
+                        swapResult.setValue(SwapResult.success(task.getResult()));
+                        return;
                     }
 
-                    @Override
-                    public void onNotFound() {
-                        isLoading.setValue(false);
+                    // Map custom exceptions ke SwapResult states
+                    Exception e = task.getException();
+                    if (e instanceof TukarJadwalRepository.TargetNotFoundException) {
                         swapResult.setValue(SwapResult.targetNotFound());
-                    }
-
-                    @Override
-                    public void onError(String msg) {
-                        isLoading.setValue(false);
+                    } else if (e instanceof TukarJadwalRepository.SwapAlreadyExistsException) {
+                        swapResult.setValue(SwapResult.alreadyExists());
+                    } else {
+                        String msg = e != null ? e.getMessage() : "Gagal mengirim permintaan";
                         swapResult.setValue(SwapResult.error(msg));
                     }
                 });

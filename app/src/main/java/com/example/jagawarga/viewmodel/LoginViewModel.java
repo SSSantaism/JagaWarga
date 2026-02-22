@@ -11,6 +11,8 @@ import com.example.jagawarga.data.repository.AuthRepository;
  * ViewModel untuk LoginActivity.
  * Mengelola UI state (loading, error, login result) dan berinteraksi dengan
  * AuthRepository.
+ *
+ * Menggunakan Task Chaining — tidak ada nested callback.
  */
 public class LoginViewModel extends ViewModel {
 
@@ -49,65 +51,53 @@ public class LoginViewModel extends ViewModel {
     public void checkAutoLogin() {
         if (authRepository.getCurrentUser() != null) {
             isLoading.setValue(true);
-            checkUserRoleInternal(authRepository.getCurrentUser().getUid());
+            String uid = authRepository.getCurrentUser().getUid();
+
+            authRepository.checkUserRole(uid)
+                    .addOnCompleteListener(task -> handleLoginTask(task));
         }
     }
 
     // ========================================================================
-    // Login
+    // Login — Task Chain: login() → checkUserRole()
     // ========================================================================
 
     public void login(String rawPhone, String password) {
         isLoading.setValue(true);
 
-        authRepository.login(rawPhone, password, new AuthRepository.AuthCallback() {
-            @Override
-            public void onSuccess(String uid) {
-                // Auth berhasil, cek role & status di Firestore
-                checkUserRoleInternal(uid);
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.error(errorMessage));
-            }
-        });
+        authRepository.login(rawPhone, password)
+                .continueWithTask(loginTask -> {
+                    // Auth berhasil, chain ke cek role & status
+                    String uid = loginTask.getResult();
+                    return authRepository.checkUserRole(uid);
+                })
+                .addOnCompleteListener(task -> handleLoginTask(task));
     }
 
     // ========================================================================
-    // Register
+    // Register — Task Chain: register() → saveNewUser()
     // ========================================================================
 
     public void register(String nama, String rawPhone, String password, String rt) {
         isLoading.setValue(true);
 
-        authRepository.register(rawPhone, password, new AuthRepository.AuthCallback() {
-            @Override
-            public void onSuccess(String uid) {
-                // Auth berhasil, simpan data ke Firestore
-                authRepository.saveNewUser(uid, rawPhone, nama, rt,
-                        new AuthRepository.SaveCallback() {
-                            @Override
-                            public void onSuccess() {
-                                isLoading.setValue(false);
-                                registerResult.setValue(RegisterResult.success());
-                            }
-
-                            @Override
-                            public void onError(String errorMessage) {
-                                isLoading.setValue(false);
-                                registerResult.setValue(RegisterResult.error(errorMessage));
-                            }
-                        });
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                isLoading.setValue(false);
-                registerResult.setValue(RegisterResult.error(errorMessage));
-            }
-        });
+        authRepository.register(rawPhone, password)
+                .continueWithTask(regTask -> {
+                    // Auth berhasil, chain ke simpan data ke Firestore
+                    String uid = regTask.getResult();
+                    return authRepository.saveNewUser(uid, rawPhone, nama, rt);
+                })
+                .addOnCompleteListener(task -> {
+                    isLoading.setValue(false);
+                    if (task.isSuccessful()) {
+                        registerResult.setValue(RegisterResult.success());
+                    } else {
+                        String msg = task.getException() != null
+                                ? task.getException().getMessage()
+                                : "Registrasi gagal";
+                        registerResult.setValue(RegisterResult.error(msg));
+                    }
+                });
     }
 
     // ========================================================================
@@ -119,41 +109,32 @@ public class LoginViewModel extends ViewModel {
     }
 
     // ========================================================================
-    // Internal
+    // Internal — Unified handler for login/autoLogin tasks
     // ========================================================================
 
-    private void checkUserRoleInternal(String uid) {
-        authRepository.checkUserRole(uid, new AuthRepository.UserDataCallback() {
-            @Override
-            public void onSuccess(User user) {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.success(user));
-            }
+    /**
+     * Handle hasil akhir Task<User> dari login/autoLogin.
+     * Mapping custom exceptions ke LoginResult states.
+     */
+    private void handleLoginTask(com.google.android.gms.tasks.Task<User> task) {
+        isLoading.setValue(false);
 
-            @Override
-            public void onPending() {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.pending());
-            }
+        if (task.isSuccessful()) {
+            loginResult.setValue(LoginResult.success(task.getResult()));
+            return;
+        }
 
-            @Override
-            public void onRejected() {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.rejected());
-            }
-
-            @Override
-            public void onNotFound() {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.notFound());
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                isLoading.setValue(false);
-                loginResult.setValue(LoginResult.error(errorMessage));
-            }
-        });
+        Exception e = task.getException();
+        if (e instanceof AuthRepository.UserPendingException) {
+            loginResult.setValue(LoginResult.pending());
+        } else if (e instanceof AuthRepository.UserRejectedException) {
+            loginResult.setValue(LoginResult.rejected());
+        } else if (e instanceof AuthRepository.UserNotFoundException) {
+            loginResult.setValue(LoginResult.notFound());
+        } else {
+            String msg = e != null ? e.getMessage() : "Login gagal";
+            loginResult.setValue(LoginResult.error(msg));
+        }
     }
 
     // ========================================================================

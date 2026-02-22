@@ -1,26 +1,30 @@
 package com.example.jagawarga.data.repository;
 
-import androidx.annotation.NonNull;
-
 import com.example.jagawarga.data.model.User;
 import com.example.jagawarga.utils.Constants;
-import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QuerySnapshot;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Repository untuk semua operasi Firebase Authentication dan login-related
  * Firestore.
  * Mengenkapsulasi login, register, role check, user profile save, dan jadwal
  * assignment.
+ *
+ * Semua method async mengembalikan Task<T> — tanpa callback interfaces.
+ * Branching logic (pending/rejected/notFound) menggunakan custom Exception.
  */
 public class AuthRepository {
 
@@ -29,35 +33,28 @@ public class AuthRepository {
     private final FirebaseFirestore db;
 
     // ========================================================================
-    // Callback Interfaces
+    // Custom Exceptions (untuk flow yang bukan error sesungguhnya)
     // ========================================================================
 
-    public interface AuthCallback {
-        void onSuccess(String uid);
-
-        void onError(String errorMessage);
+    /** Akun masih menunggu persetujuan RT. */
+    public static class UserPendingException extends Exception {
+        public UserPendingException() {
+            super("Akun masih menunggu persetujuan RT.");
+        }
     }
 
-    public interface UserDataCallback {
-        void onSuccess(User user);
-
-        void onPending();
-
-        void onRejected();
-
-        void onNotFound();
-
-        void onError(String errorMessage);
+    /** Akun ditolak oleh RT. */
+    public static class UserRejectedException extends Exception {
+        public UserRejectedException() {
+            super("Akun ditolak oleh RT.");
+        }
     }
 
-    public interface SaveCallback {
-        void onSuccess();
-
-        void onError(String errorMessage);
-    }
-
-    private interface OnBalancedDayCallback {
-        void onResult(String day);
+    /** User tidak ditemukan di Firestore. */
+    public static class UserNotFoundException extends Exception {
+        public UserNotFoundException() {
+            super("Data pengguna tidak ditemukan.");
+        }
     }
 
     public AuthRepository() {
@@ -71,74 +68,81 @@ public class AuthRepository {
 
     /**
      * Login user dengan phone (dikonversi ke fake email) dan password.
+     * 
+     * @return Task<String> berisi UID.
      */
-    public void login(String rawPhone, String password, AuthCallback callback) {
+    public Task<String> login(String rawPhone, String password) {
         String fakeEmail = createFakeEmail(rawPhone);
-        auth.signInWithEmailAndPassword(fakeEmail, password)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful() && auth.getCurrentUser() != null) {
-                        callback.onSuccess(auth.getCurrentUser().getUid());
-                    } else {
-                        String error = task.getException() != null
-                                ? task.getException().getMessage()
-                                : "Login gagal";
-                        callback.onError(error);
+        return auth.signInWithEmailAndPassword(fakeEmail, password)
+                .continueWith(task -> {
+                    if (!task.isSuccessful()) {
+                        throw task.getException() != null
+                                ? task.getException()
+                                : new Exception("Login gagal");
                     }
+                    FirebaseUser user = auth.getCurrentUser();
+                    if (user == null) {
+                        throw new Exception("Login gagal: user null");
+                    }
+                    return user.getUid();
                 });
     }
 
     /**
      * Register user baru dengan phone (dikonversi ke fake email) dan password.
+     * 
+     * @return Task<String> berisi UID.
      */
-    public void register(String rawPhone, String password, AuthCallback callback) {
+    public Task<String> register(String rawPhone, String password) {
         String fakeEmail = createFakeEmail(rawPhone);
-        auth.createUserWithEmailAndPassword(fakeEmail, password)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful() && auth.getCurrentUser() != null) {
-                        callback.onSuccess(auth.getCurrentUser().getUid());
-                    } else {
-                        String error = task.getException() != null
-                                ? task.getException().getMessage()
-                                : "Registrasi gagal";
-                        callback.onError(error);
+        return auth.createUserWithEmailAndPassword(fakeEmail, password)
+                .continueWith(task -> {
+                    if (!task.isSuccessful()) {
+                        throw task.getException() != null
+                                ? task.getException()
+                                : new Exception("Registrasi gagal");
                     }
+                    FirebaseUser user = auth.getCurrentUser();
+                    if (user == null) {
+                        throw new Exception("Registrasi gagal: user null");
+                    }
+                    return user.getUid();
                 });
     }
 
-    /**
-     * Logout user dari Firebase Auth.
-     */
+    /** Logout user dari Firebase Auth. */
     public void logout() {
         auth.signOut();
     }
 
-    /**
-     * Get current Firebase user (null jika belum login).
-     */
+    /** Get current Firebase user (null jika belum login). */
     public FirebaseUser getCurrentUser() {
         return auth.getCurrentUser();
     }
 
     // ========================================================================
-    // Firestore: Check User Role & Status
+    // Firestore: Check User Role & Status (Task Chain)
     // ========================================================================
 
     /**
      * Cek role & status user di Firestore saat login.
      * Juga auto-assign jadwal untuk user lama yang belum punya jadwal.
+     *
+     * @return Task<User> — berhasil jika user verified,
+     *         gagal dengan UserPendingException / UserRejectedException /
+     *         UserNotFoundException jika status tidak valid.
      */
-    public void checkUserRole(String uid, UserDataCallback callback) {
-        db.collection(Constants.COLLECTION_USERS).document(uid).get()
-                .addOnCompleteListener(task -> {
+    public Task<User> checkUserRole(String uid) {
+        // Step 1: Ambil dokumen user
+        return db.collection(Constants.COLLECTION_USERS).document(uid).get()
+                .continueWithTask(task -> {
                     if (!task.isSuccessful()) {
-                        callback.onError("Gagal mengambil data pengguna");
-                        return;
+                        throw new Exception("Gagal mengambil data pengguna");
                     }
 
                     DocumentSnapshot doc = task.getResult();
                     if (!doc.exists()) {
-                        callback.onNotFound();
-                        return;
+                        throw new UserNotFoundException();
                     }
 
                     String role = doc.getString(Constants.FIELD_ROLE);
@@ -152,46 +156,48 @@ public class AuthRepository {
                     if (Constants.ROLE_WARGA.equals(role)) {
                         if (statusWarga == null || Constants.STATUS_PENDING.equals(statusWarga)) {
                             auth.signOut();
-                            callback.onPending();
-                            return;
+                            throw new UserPendingException();
                         } else if (Constants.STATUS_REJECTED.equals(statusWarga)) {
                             auth.signOut();
-                            callback.onRejected();
-                            return;
+                            throw new UserRejectedException();
                         }
                     }
 
-                    // Cek apakah user lama tanpa jadwal
+                    // Step 2: Cek apakah perlu auto-assign jadwal
                     boolean needsJadwalHari = (jadwalHari == null || jadwalHari.isEmpty());
                     boolean needsJadwalId = (jadwalId == null || jadwalId.isEmpty());
 
                     if (needsJadwalHari || needsJadwalId) {
-                        // Auto-assign jadwal untuk user lama
-                        autoAssignJadwal(uid, idRt, jadwalHari, jadwalId,
-                                needsJadwalHari, needsJadwalId,
-                                (finalJadwalId, finalJadwalHari) -> {
-                                    User user = new User(uid, nama, null, idRt, role,
-                                            statusWarga, finalJadwalHari, finalJadwalId);
-                                    callback.onSuccess(user);
+                        // Chain ke auto-assign jadwal
+                        return autoAssignJadwalTask(uid, idRt, jadwalHari, jadwalId,
+                                needsJadwalHari, needsJadwalId)
+                                .continueWith(assignTask -> {
+                                    // assignTask.getResult() = String[] {finalId, finalHari}
+                                    String[] result = assignTask.getResult();
+                                    return new User(uid, nama, null, idRt, role,
+                                            statusWarga, result[1], result[0]);
                                 });
                     } else {
-                        User user = new User(uid, nama, null, idRt, role,
-                                statusWarga, jadwalHari, jadwalId);
-                        callback.onSuccess(user);
+                        // Sudah lengkap, langsung buat User
+                        return Tasks.forResult(
+                                new User(uid, nama, null, idRt, role,
+                                        statusWarga, jadwalHari, jadwalId));
                     }
                 });
     }
 
     // ========================================================================
-    // Firestore: Save New User (Registration)
+    // Firestore: Save New User (Registration) — Task Chain
     // ========================================================================
 
     /**
      * Simpan data user baru ke Firestore setelah register Auth berhasil.
      * Status = pending, role = Warga, tanpa jadwal.
+     * Otomatis logout setelah save (createUser auto-login).
+     *
+     * @return Task<Void>
      */
-    public void saveNewUser(String uid, String phone, String nama, String rt,
-            SaveCallback callback) {
+    public Task<Void> saveNewUser(String uid, String phone, String nama, String rt) {
         String formattedPhone = formatPhoneNumber(phone);
 
         Map<String, Object> data = new HashMap<>();
@@ -202,14 +208,18 @@ public class AuthRepository {
         data.put(Constants.FIELD_STATUS_WARGA, Constants.STATUS_PENDING);
         data.put(Constants.FIELD_CREATED_AT, Timestamp.now());
 
-        db.collection(Constants.COLLECTION_USERS).document(uid)
+        return db.collection(Constants.COLLECTION_USERS).document(uid)
                 .set(data)
-                .addOnSuccessListener(aVoid -> {
-                    // Logout dari sesi register (karena createUser otomatis login)
+                .continueWith(task -> {
+                    if (!task.isSuccessful()) {
+                        throw task.getException() != null
+                                ? task.getException()
+                                : new Exception("Gagal menyimpan data user");
+                    }
+                    // Logout dari sesi register (createUser otomatis login)
                     auth.signOut();
-                    callback.onSuccess();
-                })
-                .addOnFailureListener(e -> callback.onError(e.getMessage()));
+                    return null;
+                });
     }
 
     // ========================================================================
@@ -231,76 +241,95 @@ public class AuthRepository {
     }
 
     // ========================================================================
-    // Private Helpers
+    // Private Helpers — Task-based
     // ========================================================================
-
-    private interface OnJadwalAssignedCallback {
-        void onAssigned(String jadwalId, String jadwalHari);
-    }
 
     /**
      * Auto-assign jadwal untuk user lama yang belum punya jadwal.
+     * 
+     * @return Task<String[]> dimana [0] = jadwalId, [1] = jadwalHari.
      */
-    private void autoAssignJadwal(String uid, String idRt,
+    private Task<String[]> autoAssignJadwalTask(String uid, String idRt,
             String existingJadwalHari, String existingJadwalId,
-            boolean needsHari, boolean needsId,
-            OnJadwalAssignedCallback callback) {
-        getBalancedDayForRt(idRt, day -> {
-            Map<String, Object> updates = new HashMap<>();
-            String finalHari = existingJadwalHari;
-            String finalId = existingJadwalId;
+            boolean needsHari, boolean needsId) {
 
-            if (needsHari) {
-                updates.put(Constants.FIELD_JADWAL_HARI, day);
-                finalHari = day;
-            }
-            if (needsId) {
-                String newId = generateJadwalId(idRt);
-                updates.put(Constants.FIELD_JADWAL_ID, newId);
-                finalId = newId;
-            }
+        // Step 1: Dapatkan hari yang paling seimbang
+        return getBalancedDayForRtTask(idRt)
+                .continueWithTask(dayTask -> {
+                    String day = dayTask.getResult();
 
-            String resultHari = finalHari;
-            String resultId = finalId;
+                    Map<String, Object> updates = new HashMap<>();
+                    String finalHari = existingJadwalHari;
+                    String finalId = existingJadwalId;
 
-            db.collection(Constants.COLLECTION_USERS).document(uid)
-                    .update(updates)
-                    .addOnSuccessListener(v -> callback.onAssigned(resultId, resultHari))
-                    .addOnFailureListener(e -> {
-                        // Even if update fails, continue with whatever we have
-                        callback.onAssigned(resultId, resultHari);
-                    });
-        });
+                    if (needsHari) {
+                        updates.put(Constants.FIELD_JADWAL_HARI, day);
+                        finalHari = day;
+                    }
+                    if (needsId) {
+                        String newId = generateJadwalId(idRt);
+                        updates.put(Constants.FIELD_JADWAL_ID, newId);
+                        finalId = newId;
+                    }
+
+                    String resultId = finalId;
+                    String resultHari = finalHari;
+
+                    // Step 2: Update dokumen user
+                    return db.collection(Constants.COLLECTION_USERS).document(uid)
+                            .update(updates)
+                            .continueWith(updateTask -> {
+                                // Meski gagal update, tetap lanjut dengan data yang ada
+                                return new String[] { resultId, resultHari };
+                            });
+                });
     }
 
-    private void getBalancedDayForRt(String rt, OnBalancedDayCallback callback) {
+    /**
+     * Hitung hari dengan jumlah warga terkecil di RT tertentu.
+     * Menggunakan Tasks.whenAllComplete() untuk parallel queries (7 hari).
+     *
+     * @return Task<String> berisi nama hari (Senin, Selasa, dst).
+     */
+    private Task<String> getBalancedDayForRtTask(String rt) {
         String[] days = { "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu" };
-        int[] counts = new int[7];
-        AtomicInteger completed = new AtomicInteger(0);
 
-        for (int i = 0; i < days.length; i++) {
-            final int idx = i;
-            db.collection(Constants.COLLECTION_USERS)
-                    .whereEqualTo(Constants.FIELD_ID_RT, rt)
-                    .whereEqualTo(Constants.FIELD_JADWAL_HARI, days[idx])
-                    .get()
-                    .addOnSuccessListener(snap -> {
-                        counts[idx] = snap.size();
-                        if (completed.incrementAndGet() == 7) {
-                            int min = 0;
-                            for (int j = 1; j < 7; j++) {
-                                if (counts[j] < counts[min])
-                                    min = j;
-                            }
-                            callback.onResult(days[min]);
-                        }
-                    })
-                    .addOnFailureListener(e -> {
-                        if (completed.incrementAndGet() == 7) {
-                            callback.onResult(days[(int) (Math.random() * days.length)]);
-                        }
-                    });
+        // Buat 7 query parallel
+        List<Task<QuerySnapshot>> queryTasks = new ArrayList<>();
+        for (String day : days) {
+            queryTasks.add(
+                    db.collection(Constants.COLLECTION_USERS)
+                            .whereEqualTo(Constants.FIELD_ID_RT, rt)
+                            .whereEqualTo(Constants.FIELD_JADWAL_HARI, day)
+                            .get());
         }
+
+        // Tunggu semua selesai, lalu pilih hari minimum
+        return Tasks.whenAllComplete(queryTasks)
+                .continueWith(allTask -> {
+                    int[] counts = new int[7];
+                    for (int i = 0; i < 7; i++) {
+                        Task<QuerySnapshot> t = queryTasks.get(i);
+                        if (t.isSuccessful() && t.getResult() != null) {
+                            counts[i] = t.getResult().size();
+                        } else {
+                            counts[i] = Integer.MAX_VALUE; // Error → skip hari ini
+                        }
+                    }
+
+                    int minIdx = 0;
+                    for (int j = 1; j < 7; j++) {
+                        if (counts[j] < counts[minIdx]) {
+                            minIdx = j;
+                        }
+                    }
+
+                    // Fallback jika semua error
+                    if (counts[minIdx] == Integer.MAX_VALUE) {
+                        return days[(int) (Math.random() * days.length)];
+                    }
+                    return days[minIdx];
+                });
     }
 
     private String generateJadwalId(String rt) {
