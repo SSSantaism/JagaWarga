@@ -6,14 +6,20 @@ import com.example.jagawarga.RondaReminderManager;
 import com.example.jagawarga.TukarJadwalListener;
 import com.example.jagawarga.BootReceiver;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -47,6 +53,9 @@ public class DashboardRtActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard_rt);
+
+        // Minta izin notifikasi saat pertama kali masuk dashboard (Android 13+)
+        requestNotificationPermission();
 
         viewModel = new ViewModelProvider(this).get(DashboardViewModel.class);
         sessionManager = new SessionManager(this);
@@ -117,5 +126,26 @@ public class DashboardRtActivity extends AppCompatActivity {
                 pengumumanAdapter.updateData(dataList);
             }
         });
+    }
+
+    // ========================================================================
+    // Notification Permission (Android 13+ / API 33+)
+    // ========================================================================
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                        101);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+            @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }
