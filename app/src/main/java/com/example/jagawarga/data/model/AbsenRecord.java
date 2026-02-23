@@ -38,9 +38,7 @@ public class AbsenRecord {
         return jadwalId;
     }
 
-    public String getTanggal() {
-        return tanggal;
-    }
+    public String getTanggal() { return tanggal; }
 
     public Object getWaktu() {
         return waktu;

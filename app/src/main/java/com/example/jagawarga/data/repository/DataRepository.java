@@ -5,7 +5,9 @@ import android.util.Log;
 import com.example.jagawarga.data.model.PosRonda;
 import com.example.jagawarga.utils.Constants;
 import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
@@ -86,19 +88,25 @@ public class DataRepository {
      */
     public void fetchPosRonda(String idRt, PosRondaCallback callback) {
         if (idRt == null || idRt.isEmpty()) {
+            Log.w(TAG, "fetchPosRonda: idRt is null or empty!");
             callback.onNotFound();
             return;
         }
 
+        Log.d(TAG, "fetchPosRonda: querying data_rt with idRt = '" + idRt + "'");
+
         db.collection(Constants.COLLECTION_DATA_RT).document(idRt)
                 .get()
                 .addOnSuccessListener(doc -> {
+                    Log.d(TAG, "fetchPosRonda: doc.exists() = " + doc.exists());
                     if (doc.exists()) {
                         String phone = doc.getString(Constants.FIELD_POS_PHONE);
                         String lokasi = doc.getString(Constants.FIELD_LOKASI);
+                        Log.d(TAG, "fetchPosRonda: phone = " + phone + ", lokasi = " + lokasi);
                         PosRonda posRonda = new PosRonda(idRt, phone, lokasi);
                         callback.onSuccess(posRonda);
                     } else {
+                        Log.w(TAG, "fetchPosRonda: document NOT FOUND for idRt = '" + idRt + "'");
                         callback.onNotFound();
                     }
                 })
@@ -113,23 +121,28 @@ public class DataRepository {
     // ========================================================================
 
     /**
-     * Fetch daftar pengumuman, urut berdasarkan tanggal terbaru.
+     * Listen daftar pengumuman terbaru (max 3), realtime.
+     * Returns ListenerRegistration agar caller bisa detach.
      */
-    public void fetchPengumuman(PengumumanCallback callback) {
-        db.collection(Constants.COLLECTION_PENGUMUMAN)
+    public ListenerRegistration listenPengumuman(PengumumanCallback callback) {
+        return db.collection(Constants.COLLECTION_PENGUMUMAN)
                 .orderBy(Constants.FIELD_TANGGAL, Query.Direction.DESCENDING)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    Log.d(TAG, "Loaded " + queryDocumentSnapshots.size() + " pengumuman");
+                .limit(3)
+                .addSnapshotListener((snapshots, error) -> {
+                    if (error != null) {
+                        Log.e(TAG, "Error listening pengumuman: " + error.getMessage());
+                        callback.onError(error.getMessage());
+                        return;
+                    }
+                    if (snapshots == null)
+                        return;
+
+                    Log.d(TAG, "Pengumuman snapshot: " + snapshots.size() + " docs");
                     List<Map<String, Object>> dataList = new ArrayList<>();
-                    for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                    for (QueryDocumentSnapshot doc : snapshots) {
                         dataList.add(doc.getData());
                     }
                     callback.onSuccess(dataList);
-                })
-                .addOnFailureListener(e -> {
-                    Log.e(TAG, "Error loading pengumuman: " + e.getMessage());
-                    callback.onError(e.getMessage());
                 });
     }
 

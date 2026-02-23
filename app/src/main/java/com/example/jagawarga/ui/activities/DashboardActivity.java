@@ -93,7 +93,7 @@ public class DashboardActivity extends AppCompatActivity {
 
         // Trigger data loading
         viewModel.loadPosRonda(idRt);
-        viewModel.loadPengumuman();
+        viewModel.listenPengumuman();
     }
 
     // ========================================================================

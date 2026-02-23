@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat;
 
 import com.example.jagawarga.data.repository.AdminRepository;
 import com.example.jagawarga.data.repository.SessionManager;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.List;
 
@@ -28,6 +29,9 @@ public class ListPermintaanActivity extends AppCompatActivity {
     // MVVM
     private AdminRepository adminRepository;
     private String currentIdRt;
+
+    // Snapshot listener — detach saat ganti tab / destroy
+    private ListenerRegistration currentListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,20 +53,34 @@ public class ListPermintaanActivity extends AppCompatActivity {
         btnTabRegister.setOnClickListener(v -> {
             updateTabUI(true);
             if (currentIdRt != null)
-                loadPendingRegister();
+                listenPendingRegister();
         });
 
         // 2. Klik Tab Absensi
         btnTabAbsensi.setOnClickListener(v -> {
             updateTabUI(false);
             if (currentIdRt != null)
-                loadPendingAbsen();
+                listenPendingAbsen();
         });
 
         // Default Load
         updateTabUI(true);
         if (currentIdRt != null)
-            loadPendingRegister();
+            listenPendingRegister();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        detachCurrentListener();
+    }
+
+    /** Detach active snapshot listener sebelum pasang yang baru. */
+    private void detachCurrentListener() {
+        if (currentListener != null) {
+            currentListener.remove();
+            currentListener = null;
+        }
     }
 
     private void updateTabUI(boolean isRegisterActive) {
@@ -80,30 +98,32 @@ public class ListPermintaanActivity extends AppCompatActivity {
         containerList.removeAllViews();
     }
 
-    // === REGISTER PENDING ===
-    private void loadPendingRegister() {
-        adminRepository.loadPendingRegister(currentIdRt, new AdminRepository.PendingListCallback() {
-            @Override
-            public void onSuccess(List<AdminRepository.PendingItem> items) {
-                containerList.removeAllViews();
-                for (AdminRepository.PendingItem item : items) {
-                    addItemRegister(item);
-                }
-            }
+    // === REGISTER PENDING (Realtime) ===
+    private void listenPendingRegister() {
+        detachCurrentListener();
+        currentListener = adminRepository.listenPendingRegister(currentIdRt,
+                new AdminRepository.PendingListCallback() {
+                    @Override
+                    public void onSuccess(List<AdminRepository.PendingItem> items) {
+                        containerList.removeAllViews();
+                        for (AdminRepository.PendingItem item : items) {
+                            addItemRegister(item);
+                        }
+                    }
 
-            @Override
-            public void onEmpty() {
-                containerList.removeAllViews();
-                Toast.makeText(ListPermintaanActivity.this,
-                        getString(R.string.toast_no_pending_register), Toast.LENGTH_SHORT).show();
-            }
+                    @Override
+                    public void onEmpty() {
+                        containerList.removeAllViews();
+                        Toast.makeText(ListPermintaanActivity.this,
+                                getString(R.string.toast_no_pending_register), Toast.LENGTH_SHORT).show();
+                    }
 
-            @Override
-            public void onError(String msg) {
-                Toast.makeText(ListPermintaanActivity.this,
-                        getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
-            }
-        });
+                    @Override
+                    public void onError(String msg) {
+                        Toast.makeText(ListPermintaanActivity.this,
+                                getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void addItemRegister(AdminRepository.PendingItem item) {
@@ -128,7 +148,7 @@ public class ListPermintaanActivity extends AppCompatActivity {
                             Toast.makeText(ListPermintaanActivity.this,
                                     getString(R.string.toast_warga_accepted, ""),
                                     Toast.LENGTH_SHORT).show();
-                            containerList.removeView(itemView);
+                            // Listener otomatis refresh — tidak perlu manual remove
                         }
 
                         @Override
@@ -148,7 +168,7 @@ public class ListPermintaanActivity extends AppCompatActivity {
                 public void onSuccess() {
                     Toast.makeText(ListPermintaanActivity.this,
                             getString(R.string.toast_warga_rejected), Toast.LENGTH_SHORT).show();
-                    containerList.removeView(itemView);
+                    // Listener otomatis refresh
                 }
 
                 @Override
@@ -162,30 +182,32 @@ public class ListPermintaanActivity extends AppCompatActivity {
         containerList.addView(itemView);
     }
 
-    // === ABSEN PENDING ===
-    private void loadPendingAbsen() {
-        adminRepository.loadPendingAbsen(currentIdRt, new AdminRepository.AbsenPendingListCallback() {
-            @Override
-            public void onSuccess(List<AdminRepository.AbsenPendingItem> items) {
-                containerList.removeAllViews();
-                for (AdminRepository.AbsenPendingItem item : items) {
-                    addItemAbsen(item);
-                }
-            }
+    // === ABSEN PENDING (Realtime) ===
+    private void listenPendingAbsen() {
+        detachCurrentListener();
+        currentListener = adminRepository.listenPendingAbsen(currentIdRt,
+                new AdminRepository.AbsenPendingListCallback() {
+                    @Override
+                    public void onSuccess(List<AdminRepository.AbsenPendingItem> items) {
+                        containerList.removeAllViews();
+                        for (AdminRepository.AbsenPendingItem item : items) {
+                            addItemAbsen(item);
+                        }
+                    }
 
-            @Override
-            public void onEmpty() {
-                containerList.removeAllViews();
-                Toast.makeText(ListPermintaanActivity.this,
-                        getString(R.string.toast_no_pending_absen), Toast.LENGTH_SHORT).show();
-            }
+                    @Override
+                    public void onEmpty() {
+                        containerList.removeAllViews();
+                        Toast.makeText(ListPermintaanActivity.this,
+                                getString(R.string.toast_no_pending_absen), Toast.LENGTH_SHORT).show();
+                    }
 
-            @Override
-            public void onError(String msg) {
-                Toast.makeText(ListPermintaanActivity.this,
-                        getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
-            }
-        });
+                    @Override
+                    public void onError(String msg) {
+                        Toast.makeText(ListPermintaanActivity.this,
+                                getString(R.string.toast_load_failed, msg), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void addItemAbsen(AdminRepository.AbsenPendingItem item) {
@@ -205,7 +227,7 @@ public class ListPermintaanActivity extends AppCompatActivity {
                 public void onSuccess() {
                     Toast.makeText(ListPermintaanActivity.this,
                             getString(R.string.toast_absen_accepted), Toast.LENGTH_SHORT).show();
-                    containerList.removeView(itemView);
+                    // Listener otomatis refresh
                 }
 
                 @Override
@@ -222,7 +244,7 @@ public class ListPermintaanActivity extends AppCompatActivity {
                 public void onSuccess() {
                     Toast.makeText(ListPermintaanActivity.this,
                             getString(R.string.toast_absen_rejected), Toast.LENGTH_SHORT).show();
-                    containerList.removeView(itemView);
+                    // Listener otomatis refresh
                 }
 
                 @Override

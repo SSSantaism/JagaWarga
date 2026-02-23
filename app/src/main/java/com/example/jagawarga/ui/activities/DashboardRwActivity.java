@@ -9,8 +9,10 @@ import com.example.jagawarga.BootReceiver;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -26,6 +28,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.jagawarga.data.model.PosRonda;
 import com.example.jagawarga.data.repository.AuthRepository;
 import com.example.jagawarga.data.repository.SessionManager;
 import com.example.jagawarga.ui.adapter.PengumumanAdapter;
@@ -47,6 +50,12 @@ public class DashboardRwActivity extends AppCompatActivity {
     // MENU CARD (di dalam cardToday)
     private LinearLayout menuKelolaKetuaRT; // id: menuTerimaLaporan
     private LinearLayout menuBuatPengumuman; // id: menuBuatPengumuman
+
+    // Contact card
+    private TextView tvContactNumber;
+    private TextView tvContactLocation;
+    private ImageView imgWhatsapp;
+    private String currentPosPhone = null;
 
     // Pengumuman
     private RecyclerView rvPengumuman;
@@ -78,9 +87,11 @@ public class DashboardRwActivity extends AppCompatActivity {
         setTodayDate();
         setupMenuClick();
         setupLogout();
+        setupContactCard();
 
         observeViewModel();
-        viewModel.loadPengumuman();
+        viewModel.listenPengumuman();
+        viewModel.loadPosRonda(idRtRw);
     }
 
     // =======================================
@@ -112,6 +123,11 @@ public class DashboardRwActivity extends AppCompatActivity {
         // menu di dalam cardToday
         menuKelolaKetuaRT = findViewById(R.id.menuTerimaLaporan); // teks: "Kelola Ketua RT"
         menuBuatPengumuman = findViewById(R.id.menuBuatPengumuman); // teks: "Buat Pengumuman"
+
+        // Contact card
+        tvContactNumber = findViewById(R.id.tvContactNumberText);
+        tvContactLocation = findViewById(R.id.tvContactLocation);
+        imgWhatsapp = findViewById(R.id.imgWhatsapp);
 
         // Pengumuman RecyclerView
         rvPengumuman = findViewById(R.id.rvPengumuman);
@@ -183,11 +199,70 @@ public class DashboardRwActivity extends AppCompatActivity {
     // OBSERVE VIEWMODEL
     // =======================================
     private void observeViewModel() {
+        // Pos Ronda data
+        viewModel.getPosRondaData().observe(this, posRonda -> {
+            if (posRonda != null) {
+                currentPosPhone = posRonda.getTelepon();
+                if (currentPosPhone != null) {
+                    tvContactNumber.setText(currentPosPhone);
+                } else {
+                    tvContactNumber.setText(getString(R.string.text_dash));
+                }
+                if (posRonda.getLokasi() != null) {
+                    tvContactLocation.setText(posRonda.getLokasi());
+                } else {
+                    tvContactLocation.setText(getString(R.string.text_belum_diatur));
+                }
+            }
+        });
+
+        // Pengumuman data
         viewModel.getPengumumanList().observe(this, dataList -> {
             if (dataList != null) {
                 pengumumanAdapter.updateData(dataList);
             }
         });
+
+        // Error
+        viewModel.getErrorMessage().observe(this, msg -> {
+            if (msg != null) {
+                Log.e("DashboardRw", msg);
+            }
+        });
+    }
+
+    // ========================================================================
+    // WhatsApp Contact
+    // ========================================================================
+
+    private void setupContactCard() {
+        if (imgWhatsapp != null) {
+            imgWhatsapp.setOnClickListener(v -> openWhatsapp());
+        }
+    }
+
+    private void openWhatsapp() {
+        if (currentPosPhone == null || currentPosPhone.isEmpty()) {
+            Toast.makeText(this, getString(R.string.toast_no_whatsapp_number), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String raw = currentPosPhone.replaceAll("[^0-9]", "");
+        String international = raw.startsWith("0") ? "62" + raw.substring(1) : raw;
+        String url = "https://wa.me/" + international;
+
+        try {
+            Intent waIntent = new Intent(Intent.ACTION_VIEW);
+            waIntent.setData(Uri.parse(url));
+            waIntent.setPackage("com.whatsapp");
+            startActivity(waIntent);
+        } catch (Exception e) {
+            try {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                startActivity(browserIntent);
+            } catch (Exception ex) {
+                Toast.makeText(this, getString(R.string.toast_no_whatsapp_app), Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     // ========================================================================
