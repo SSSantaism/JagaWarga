@@ -89,7 +89,7 @@ public class DashboardRtActivity extends AppCompatActivity {
 
         // ====== 5. Observe ViewModel ======
         observeViewModel();
-        viewModel.loadPengumuman();
+        viewModel.listenPengumuman();
 
         // ====== 6. Setup Listener (Navigasi) ======
         menuTerimaLaporan.setOnClickListener(v -> startActivity(new Intent(this, TerimaLaporanActivity.class)));

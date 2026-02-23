@@ -80,7 +80,7 @@ public class DashboardRwActivity extends AppCompatActivity {
         setupLogout();
 
         observeViewModel();
-        viewModel.loadPengumuman();
+        viewModel.listenPengumuman();
     }
 
     // =======================================
