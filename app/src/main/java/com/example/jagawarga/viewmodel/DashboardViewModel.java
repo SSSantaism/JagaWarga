@@ -6,13 +6,16 @@ import androidx.lifecycle.ViewModel;
 
 import com.example.jagawarga.data.model.PosRonda;
 import com.example.jagawarga.data.repository.DataRepository;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * ViewModel untuk DashboardActivity.
- * Mengelola data Pos Ronda dan Pengumuman dari DataRepository.
+ * ViewModel untuk DashboardActivity, DashboardRtActivity, DashboardRwActivity.
+ * Mengelola data Pos Ronda dan Pengumuman (realtime).
+ *
+ * ListenerRegistration di-detach otomatis di onCleared() — aman dari leak.
  */
 public class DashboardViewModel extends ViewModel {
 
@@ -21,6 +24,9 @@ public class DashboardViewModel extends ViewModel {
     private final MutableLiveData<PosRonda> posRondaData = new MutableLiveData<>();
     private final MutableLiveData<List<Map<String, Object>>> pengumumanList = new MutableLiveData<>();
     private final MutableLiveData<String> errorMessage = new MutableLiveData<>();
+
+    // Snapshot listener — dikelola lifecycle-safe
+    private ListenerRegistration pengumumanListener;
 
     public DashboardViewModel() {
         this.dataRepository = new DataRepository();
@@ -39,7 +45,7 @@ public class DashboardViewModel extends ViewModel {
     }
 
     /**
-     * Load data Pos Ronda untuk RT tertentu.
+     * Load data Pos Ronda untuk RT tertentu (one-shot).
      */
     public void loadPosRonda(String idRt) {
         dataRepository.fetchPosRonda(idRt, new DataRepository.PosRondaCallback() {
@@ -61,19 +67,33 @@ public class DashboardViewModel extends ViewModel {
     }
 
     /**
-     * Load daftar pengumuman.
+     * Listen pengumuman terbaru (max 3) secara realtime.
+     * Hanya pasang 1 listener — jika sudah ada, skip.
      */
-    public void loadPengumuman() {
-        dataRepository.fetchPengumuman(new DataRepository.PengumumanCallback() {
-            @Override
-            public void onSuccess(List<Map<String, Object>> dataList) {
-                pengumumanList.setValue(dataList);
-            }
+    public void listenPengumuman() {
+        if (pengumumanListener != null)
+            return; // sudah aktif
 
-            @Override
-            public void onError(String msg) {
-                errorMessage.setValue(msg);
-            }
-        });
+        pengumumanListener = dataRepository.listenPengumuman(
+                new DataRepository.PengumumanCallback() {
+                    @Override
+                    public void onSuccess(List<Map<String, Object>> dataList) {
+                        pengumumanList.setValue(dataList);
+                    }
+
+                    @Override
+                    public void onError(String msg) {
+                        errorMessage.setValue(msg);
+                    }
+                });
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        if (pengumumanListener != null) {
+            pengumumanListener.remove();
+            pengumumanListener = null;
+        }
     }
 }

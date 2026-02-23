@@ -5,6 +5,7 @@ import android.util.Log;
 import com.example.jagawarga.utils.Constants;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
@@ -194,15 +195,19 @@ public class AdminRepository {
     // ========================================================================
 
     /**
-     * Load pending register untuk RT tertentu.
+     * Listen pending register untuk RT tertentu (realtime).
+     * Returns ListenerRegistration agar caller bisa detach.
      */
-    public void loadPendingRegister(String idRt, PendingListCallback callback) {
-        db.collection(Constants.COLLECTION_USERS)
+    public ListenerRegistration listenPendingRegister(String idRt, PendingListCallback callback) {
+        return db.collection(Constants.COLLECTION_USERS)
                 .whereEqualTo(Constants.FIELD_ID_RT, idRt)
                 .whereEqualTo(Constants.FIELD_STATUS_WARGA, Constants.STATUS_PENDING)
-                .get()
-                .addOnSuccessListener(snap -> {
-                    if (snap.isEmpty()) {
+                .addSnapshotListener((snap, error) -> {
+                    if (error != null) {
+                        callback.onError(error.getMessage());
+                        return;
+                    }
+                    if (snap == null || snap.isEmpty()) {
                         callback.onEmpty();
                         return;
                     }
@@ -214,8 +219,7 @@ public class AdminRepository {
                                 doc.getString(Constants.FIELD_TELEPON)));
                     }
                     callback.onSuccess(items);
-                })
-                .addOnFailureListener(e -> callback.onError(e.getMessage()));
+                });
     }
 
     /**
@@ -251,15 +255,19 @@ public class AdminRepository {
     // ========================================================================
 
     /**
-     * Load pending absen untuk RT tertentu.
+     * Listen pending absen untuk RT tertentu (realtime).
+     * Returns ListenerRegistration agar caller bisa detach.
      */
-    public void loadPendingAbsen(String idRt, AbsenPendingListCallback callback) {
-        db.collection(Constants.COLLECTION_ABSENSI)
+    public ListenerRegistration listenPendingAbsen(String idRt, AbsenPendingListCallback callback) {
+        return db.collection(Constants.COLLECTION_ABSENSI)
                 .whereEqualTo(Constants.FIELD_ID_RT, idRt)
                 .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_PENDING)
-                .get()
-                .addOnSuccessListener(snap -> {
-                    if (snap.isEmpty()) {
+                .addSnapshotListener((snap, error) -> {
+                    if (error != null) {
+                        callback.onError(error.getMessage());
+                        return;
+                    }
+                    if (snap == null || snap.isEmpty()) {
                         callback.onEmpty();
                         return;
                     }
@@ -272,8 +280,7 @@ public class AdminRepository {
                                 waktuObj != null ? waktuObj.toString() : "-"));
                     }
                     callback.onSuccess(items);
-                })
-                .addOnFailureListener(e -> callback.onError(e.getMessage()));
+                });
     }
 
     /**
