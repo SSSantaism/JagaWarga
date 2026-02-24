@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -23,6 +24,7 @@ import com.example.jagawarga.viewmodel.TukarJadwalViewModel;
 public class TukarJadwalActivity extends AppCompatActivity {
 
     private EditText inputIdJadwalSaya, inputIdJadwalTujuan;
+    private TextView tvPrefixJadwalSaya, tvPrefixJadwalTujuan;
     private Button btnTukar;
     private ImageButton btnBack;
 
@@ -30,6 +32,7 @@ public class TukarJadwalActivity extends AppCompatActivity {
 
     // User data dari session
     private String myUserId, myNama, myJadwalId, myJadwalHari, myIdRt;
+    private String jadwalPrefix; // e.g. "JDW-01-"
 
     // MVVM
     private TukarJadwalViewModel viewModel;
@@ -50,6 +53,9 @@ public class TukarJadwalActivity extends AppCompatActivity {
         myJadwalHari = session.getJadwalHari();
         myIdRt = session.getIdRt();
 
+        // Hitung prefix: JDW-{RT}-
+        jadwalPrefix = "JDW-" + (myIdRt != null ? myIdRt : "00") + "-";
+
         initViews();
         setupListeners();
         observeViewModel();
@@ -58,12 +64,22 @@ public class TukarJadwalActivity extends AppCompatActivity {
     private void initViews() {
         inputIdJadwalSaya = findViewById(R.id.inputIdJadwalSaya);
         inputIdJadwalTujuan = findViewById(R.id.inputIdJadwalTujuan);
+        tvPrefixJadwalSaya = findViewById(R.id.tvPrefixJadwalSaya);
+        tvPrefixJadwalTujuan = findViewById(R.id.tvPrefixJadwalTujuan);
         btnTukar = findViewById(R.id.btnTukarAbsen);
         btnBack = findViewById(R.id.btnBackAbsen);
 
-        // Pre-fill ID Jadwal Saya
+        // Set prefix sesuai RT user
+        tvPrefixJadwalSaya.setText(jadwalPrefix);
+        tvPrefixJadwalTujuan.setText(jadwalPrefix);
+
+        // Pre-fill ID Jadwal Saya (hanya suffix, tanpa prefix)
         if (myJadwalId != null) {
-            inputIdJadwalSaya.setText(myJadwalId);
+            String suffix = myJadwalId;
+            if (myJadwalId.startsWith(jadwalPrefix)) {
+                suffix = myJadwalId.substring(jadwalPrefix.length());
+            }
+            inputIdJadwalSaya.setText(suffix);
             inputIdJadwalSaya.setEnabled(false);
         }
 
@@ -74,13 +90,16 @@ public class TukarJadwalActivity extends AppCompatActivity {
         btnBack.setOnClickListener(v -> finish());
 
         btnTukar.setOnClickListener(v -> {
-            String idJadwalTujuan = inputIdJadwalTujuan.getText().toString().trim().toUpperCase();
+            String inputSuffix = inputIdJadwalTujuan.getText().toString().trim().toUpperCase();
 
-            if (idJadwalTujuan.isEmpty()) {
+            if (inputSuffix.isEmpty()) {
                 Toast.makeText(this, getString(R.string.toast_enter_target_jadwal),
                         Toast.LENGTH_SHORT).show();
                 return;
             }
+
+            // Gabungkan prefix + suffix → full jadwal ID
+            String idJadwalTujuan = jadwalPrefix + inputSuffix;
 
             if (idJadwalTujuan.equals(myJadwalId)) {
                 Toast.makeText(this, getString(R.string.toast_cannot_swap_self),

@@ -62,20 +62,40 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/imgAbsenIllustration" />
 
-        <EditText
-            android:id="@+id/inputIdJadwalSaya"
+        <LinearLayout
+            android:id="@+id/layoutJadwalSaya"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_marginTop="8dp"
             android:background="@drawable/edittext_background"
-            android:importantForAutofill="no"
-            android:inputType="phone"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/textIdJadwalSaya" />
+            app:layout_constraintTop_toBottomOf="@id/textIdJadwalSaya">
+
+            <TextView
+                android:id="@+id/tvPrefixJadwalSaya"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="0dp"
+                android:text="JDW-01-"
+                android:textColor="#999999"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/inputIdJadwalSaya"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:importantForAutofill="no"
+                android:inputType="textCapCharacters"
+                android:paddingHorizontal="4dp"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/textIdJadwalTujuan"
@@ -87,22 +107,42 @@
             android:textColor="@color/gray"
             android:textSize="14sp"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/inputIdJadwalSaya" />
+            app:layout_constraintTop_toBottomOf="@id/layoutJadwalSaya" />
 
-        <EditText
-            android:id="@+id/inputIdJadwalTujuan"
+        <LinearLayout
+            android:id="@+id/layoutJadwalTujuan"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_marginTop="8dp"
             android:background="@drawable/edittext_background"
-            android:importantForAutofill="no"
-            android:inputType="textCapCharacters"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/textIdJadwalTujuan" />
+            app:layout_constraintTop_toBottomOf="@id/textIdJadwalTujuan">
+
+            <TextView
+                android:id="@+id/tvPrefixJadwalTujuan"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="0dp"
+                android:text="JDW-01-"
+                android:textColor="#999999"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/inputIdJadwalTujuan"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:importantForAutofill="no"
+                android:inputType="textCapCharacters"
+                android:paddingHorizontal="4dp"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/btnTukarAbsen"
@@ -120,7 +160,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/inputIdJadwalTujuan"
+            app:layout_constraintTop_toBottomOf="@id/layoutJadwalTujuan"
             app:layout_constraintVertical_bias="1.0" />
 
         <TextView
