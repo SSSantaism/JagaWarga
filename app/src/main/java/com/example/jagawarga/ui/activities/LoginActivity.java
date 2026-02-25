@@ -74,21 +74,29 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_login);
-
-        // Inisialisasi MVVM
-        viewModel = new ViewModelProvider(this).get(LoginViewModel.class);
         sessionManager = new SessionManager(this);
 
-        // Cek auto-login (jika "Ingat Saya" aktif)
-        if (sessionManager.isRememberMe()
-                && sessionManager.getIdWarga() != null) {
-            isAutoLogin = true;
-            viewModel.checkAutoLogin();
-        } else if (sessionManager.getIdWarga() != null) {
-            // User tidak centang "Ingat Saya", clear session
+        // Fast-path: jika "Ingat Saya" aktif dan session ada, langsung ke dashboard
+        // tanpa inflate login layout (menghindari flicker)
+        if (sessionManager.isRememberMe() && sessionManager.getIdWarga() != null) {
+            String role = sessionManager.getRole();
+            String nama = sessionManager.getNama();
+            if (role != null) {
+                redirectDashboard(role, nama != null ? nama : "User");
+                return; // Skip seluruh login UI
+            }
+        }
+
+        // User tidak centang "Ingat Saya", clear session
+        if (sessionManager.getIdWarga() != null) {
+            viewModel = new ViewModelProvider(this).get(LoginViewModel.class);
             viewModel.logoutIfNeeded();
             sessionManager.clearSession();
+        }
+
+        setContentView(R.layout.activity_login);
+        if (viewModel == null) {
+            viewModel = new ViewModelProvider(this).get(LoginViewModel.class);
         }
 
         initViews();
